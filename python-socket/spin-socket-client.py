@@ -31,8 +31,11 @@ def receiveBlock(s, num):
         chunks.append(chunk)
         bytes_recd = bytes_recd + len(chunk)
         if chunk == b'':
-            raise RuntimeError("socket connection broken")        
-    return b''.join(chunks)
+            raise RuntimeError("socket connection broken")
+    rv = b''.join(chunks)
+#    print('received {} bytes'.format(num))
+#    print(''.join(format(x, '02x') for x in rv))
+    return rv
     
 def runClient():
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -41,18 +44,23 @@ def runClient():
     session_start = time.time()
     print_time = 0
     while True:
-        pnum = int.from_bytes(receiveBlock(s, 8), 'big')
-        packet_size = int.from_bytes(receiveBlock(s, 8), 'big')
+        frame_start = int.from_bytes(receiveBlock(s, 1), 'big')
+        if frame_start != 4:
+            raise RuntimeError("invalid 'frame_start' received [{}] expected [4]".format(frame_start))        
+        protocol = int.from_bytes(receiveBlock(s, 2), 'big')
+        if protocol != 32:
+            raise RuntimeError("invalid 'protocol' received [{}] expected [32]".format(protocol))
+        packet_size = int.from_bytes(receiveBlock(s, 4), 'big')
         data = receiveBlock(s, packet_size)
-        tag = int.from_bytes(s.recv(1), 'big')
-        if tag != 10:
-            raise RuntimeError("invalid tag received [{}] expected [10]".format(tag))
+        frame_end = int.from_bytes(receiveBlock(s, 1), 'big')
+        if frame_end != 3:
+            raise RuntimeError("invalid 'frame_end' received [{}] expected [3]".format(frame_end))
         total_received = total_received + packet_size
         time_delta = time.time() - session_start
         if time_delta > 1 and int(time_delta)%2==0 and print_time != int(time_delta):
             print_time = int(time_delta)
             bpsec = int(total_received / time_delta)
-            print('#{} {} Bytes [{}/sec]'.format(pnum, total_received, sizeof_fmt(bpsec)))
+            print('{} [{}/sec]'.format(sizeof_fmt(total_received), sizeof_fmt(bpsec)))
         if print_data:
             print("[{}]".format(data))
 

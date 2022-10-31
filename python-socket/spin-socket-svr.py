@@ -42,7 +42,9 @@ def serveClient(c):
     total_sent = 0
     session_start = time.time()
     print_time = 0
-    tag = 10
+    frame_start = 4
+    frame_end = 3
+    protocol = 32
     try:
         with c:
             while True:
@@ -53,19 +55,20 @@ def serveClient(c):
                     pkt_label = "\n\033[2;31;43m[" + str(pnum) + ']\033[0;0m\n'
                     pkt_label_enc = pkt_label.encode()
                     packet_size = packet_size + len(pkt_label_enc)
-                c.sendall(pnum.to_bytes(8, 'big'))
-                c.sendall(packet_size.to_bytes(8, 'big'))
+                c.sendall(frame_start.to_bytes(1, 'big'))
+                c.sendall(protocol.to_bytes(2, 'big'))                
+                c.sendall(packet_size.to_bytes(4, 'big'))
                 if add_packet_label:
                     c.sendall(pkt_label_enc)
                 c.sendall(data)
-                c.sendall(tag.to_bytes(1, 'big'))
+                c.sendall(frame_end.to_bytes(1, 'big'))
                 pnum = pnum + 1
                 total_sent = total_sent + packet_size
                 time_delta = time.time() - session_start
                 if time_delta > 1 and int(time_delta)%2==0 and print_time != int(time_delta):
                     print_time = int(time_delta)
                     bpsec = int(total_sent / time_delta)
-                    print('#{} {} Bytes [{}/sec]'.format(pnum, total_sent, sizeof_fmt(bpsec)))
+                    print('#{} {} [{}/sec]'.format(pnum, sizeof_fmt(total_sent), sizeof_fmt(bpsec)))
                 if packet_delay > 0:
                     time.sleep(packet_delay)
     except IOError as e:
