@@ -1,5 +1,6 @@
 .PHONY: all
 info:
+	@echo ${DEV_DIR}
 	@echo $(CXX)
 	@which g++
 	@g++ --version
@@ -8,11 +9,12 @@ info:
 list: $(wildcard *.cpp)
 	@ls -la $?
 
+DEV_DIR:=${HOME}/dev-tools/dev/
 INC := -Ibenchmark/include
-INC += -I/home/ykhodak/dev-tools/dev/utils
-#LINK := 
+INC += -I${DEV_DIR}/utils
+LINK := -L${DEV_DIR}/utils/build
 CPPFLAGS := $(INC) $(LINK) -std=c++17 -Wall -Wextra -O3
-LDFLAGS := -lbenchmark -lpthread
+LDFLAGS := -lbenchmark -lpthread -ldev-utils
 BUILD := bin
 
 %:

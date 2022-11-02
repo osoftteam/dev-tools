@@ -3,5 +3,5 @@
 
 namespace dev
 {
-    void start_tcp_spinner(const std::string& cfg_file);
+    void start_tcp_spinner(const std::string& runmode, const std::string& cfg_file);
 };

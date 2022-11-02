@@ -3,6 +3,7 @@
 #include <iostream>
 #include <cstring>
 #include <unordered_map>
+#include "dev-utils.h"
 
 using std::cout;
 using std::endl;
@@ -189,15 +190,17 @@ void cfix::colorize_stdin()
 
 void cfix::run_test()
 {
-    char buff[] = "[23/03/2012 12:51:06.057245]8=FIX.4.4|9=334|35=AB|49=CLIHUB|56=FLINKI_PJ|115=CLIENT_PJ|116=CS1|50=A1|34=6|52=20120323-12:51:06.053|11=CAA0001|38=2000000|55=AUD/USD|15=AUD|40=D|117=0b4b91a825|54=1|167=NONE|554=HWfrfnUAKa|555=2|654=CAA0001_1|600=AUD/USD|588=20120328|687=1000000|624=2|566=1.057515|564=O|654=CAA0001_2|600=AUD/USD|588=20120405|687=1000000|624=1|566=1.057477|564=C|10=000|";
-
-    cout << "cfix - running test" << endl;
-    string input_s(buff);
-    string fix_type = analyse(input_s);
-    apply_cgroup(input_s, ctag1_begin, ctags1);
-    apply_cgroup(input_s, ctag2_begin, ctags2);
-    apply_cgroup(input_s, ctag2_begin, ctags3);
-    cout << fix_type << input_s;
+    dev::STRINGS lst = {"[23/03/2012 12:51:06.057245]8=FIX.4.4|9=334|35=AB|49=CLIHUB|56=FLINKI_PJ|115=CLIENT_PJ|116=CS1|50=A1|34=6|52=20120323-12:51:06.053|11=CAA0001|38=2000000|55=AUD/USD|15=AUD|40=D|117=0b4b91a825|54=1|167=NONE|554=HWfrfnUAKa|555=2|654=CAA0001_1|600=AUD/USD|588=20120328|687=1000000|624=2|566=1.057515|564=O|654=CAA0001_2|600=AUD/USD|588=20120405|687=1000000|624=1|566=1.057477|564=C|10=000|",
+        "8=FIX.4.4|9=473|35=D|34=5|49=SENDER2|52=20230122-20:56:57|56=TARGET3|11=80217_94596|22=5|48=AAPL|15=USD|21=3|38=111|40=1|54=2|55=AAPL|59=0|64=20221201|461=ABCD|77=O|202=145.0|207=OPRA|200=202301|120=USD|60=20230122-19:21:41.919|453=2|448=abcd|447=C|452=11|448=MyBank|447=B|452=29|541=20230120|228=1.00000000|6499=N|561=1.0|562=1.0|7647=TEST1-OVER-TEST2|957=2|958=BROKER_REASON|959=14|960=Execution Negotiated|958=PM|959=14|960=abcd|10=006|"};
+    
+    for(auto& s : lst)
+    {
+        string fix_type = analyse(s);
+        apply_cgroup(s, ctag1_begin, ctags1);
+        apply_cgroup(s, ctag2_begin, ctags2);
+        apply_cgroup(s, ctag2_begin, ctags3);
+        cout << fix_type << s;
+    }
 };
 
 using FTAGS = std::unordered_map<int, std::string_view>;

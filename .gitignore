@@ -1,1 +1,6 @@
+dev/utils/build/
 dev/cfix/bin/
+dev/cfix/build/
+dev/benchmark/bin/
+dev/test/bin/
+dev/test/build/
