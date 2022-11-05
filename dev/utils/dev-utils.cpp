@@ -12,9 +12,13 @@ size_t dev::stoui(const std::string_view& s)
     if(!std::isdigit(digit))return 0;
     ++i;
     size_t rv = (digit - '0');
-    int arr_idx = 0;
+    size_t arr_idx = 0;
     while(i != s.rend())
     {
+        if(arr_idx > sizeof(arr10)){
+            std::cerr << "stoui - out of digits" << std::endl;
+            return 0;
+        }
         digit = *i;
         if(!std::isdigit(digit))return 0;
         rv += (digit - '0') * arr10[arr_idx];
@@ -89,10 +93,11 @@ std::string& dev::trim(std::string &s) {
     return ltrim(rtrim(s));
 }
 
-std::string dev::size_human(uint64_t bytes)
+std::string dev::size_human(uint64_t bytes, bool bytes_units)
 {
     static constexpr char len = 5;
-	static constexpr char suffix[len][3] = {"B", "KB", "MB", "GB", "TB"};
+	static constexpr char suffix_bytes[len][3] = {"B", "KB", "MB", "GB", "TB"};
+    static constexpr char suffix[len][3] = {"B", "K", "M", "G", "T"};
 
 	int i = 0;
 	double dblBytes = bytes;
@@ -104,7 +109,12 @@ std::string dev::size_human(uint64_t bytes)
 	}
 
     char output[64];
-    sprintf(output, "%.02lf%s", dblBytes, suffix[i]);
+    if(bytes_units){
+        sprintf(output, "%.02lf%s", dblBytes, suffix_bytes[i]);
+    }
+    else{
+        sprintf(output, "%.02lf%s", dblBytes, suffix[i]);
+    }
     std::string rv{output};
     return output;
 }
@@ -127,6 +137,7 @@ bool dev::sendall(int s, char *buf, size_t len)
     return true;
 };
 
+
 bool dev::readall(int s, char *buf, size_t len)
 {
     size_t total = 0;
@@ -137,6 +148,10 @@ bool dev::readall(int s, char *buf, size_t len)
         n = read(s, buf+total, bytesleft);
         if (n == -1) {
             perror("socket-read");
+            return false;
+        }
+        else if(n == 0){
+            perror("socket-read/closed");
             return false;
         }
         total += n;

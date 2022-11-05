@@ -11,6 +11,7 @@ namespace dev
         bool init(int skt, size_t spin_sleep_time_ms);
         void spin_packets(char* bdata, uint32_t bdata_len);
         void receive_packets();
+        void receive_fix_messages();
     private:
         bool send_packet(char* bdata, uint32_t bdata_len);
         int  read_packet();

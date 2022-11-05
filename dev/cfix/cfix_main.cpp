@@ -8,8 +8,6 @@
 #include "tcp_spinner.h"
 #include "tag_generator.h"
 
-static bool run_server = false;
-
 void display_verbose_tags_info()
 {
     struct tag_info
@@ -51,12 +49,16 @@ void display_help(const char* n)
     std::cout << n << " -f <cfg-file> read config file\n";
     std::cout << "Example: " << n << " -s ctf-server" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -s ctf-client" << " -f data/spin.properties\n";
+    std::cout << "Example: " << n << " -s fix-server" << " -f data/spin.properties\n";
+    std::cout << "Example: " << n << " -s fix-client" << " -f data/spin.properties\n";
+    std::cout << std::endl;
+    std::cout << " env: COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44 COLORIZE_FIX_TAGS2..3\n";
+    std::cout << " env: COLORIZE_FIX_TAGS1=none  for 'no-color'\n";
 }
 
-void SIGPIPE_handler(int s) {
+void SIGPIPE_handler(int ) {
     printf("Caught SIGPIPE\n");
 }
-
 
 int main(int argc, char* argv[])
 {

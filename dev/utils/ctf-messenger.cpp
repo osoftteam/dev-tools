@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <thread>
 #include "ctf-messenger.h"
+#include "fix-utils.h"
 
 static char frame_start    {4};
 static char frame_end      {3};
@@ -50,6 +51,40 @@ void dev::ctf_messenger::receive_packets()
     }
 };
 
+void dev::ctf_messenger::receive_fix_messages()
+{
+    auto session_start = time(nullptr);
+    size_t pnum = 0;
+    size_t total_received = 0;
+    size_t print_time = 0;
+    
+    while(1)
+    {
+        auto bdata_len = read_packet();
+        if(bdata_len <= 0)return;
+        std::string_view s(m_buf, bdata_len);
+        dev::fixmsg_view f(s);
+        f.build_fix_view();
+        //auto msg_type = f.message_type();
+        //std::cout << dev::fixtype2name(msg_type);
+        //f.print_tags();
+        //std::cout << std::endl;
+        
+        total_received += bdata_len;
+        ++pnum;
+        
+        auto now = time(nullptr);
+        auto time_delta = now - session_start;
+        if(print_time != (size_t)time_delta && time_delta%2 == 0)
+        {
+            print_time = (size_t)time_delta;
+            auto bpsec = int(total_received / time_delta);
+            auto ppsec = int(pnum / time_delta);
+            std::cout << "#" << pnum << " " << dev::size_human(ppsec, false) << "msg/sec " << " " << dev::size_human(bpsec) << "/sec" << std::endl;
+        }
+    }
+};
+
 int dev::ctf_messenger::read_packet()
 {
     char frame_start1{0};
@@ -82,13 +117,7 @@ int dev::ctf_messenger::read_packet()
     {
         std::cout << "invalid 'frame_end' received [" << (int)frame_end1 << " expected [" << frame_end << "]\n";
         return -1;
-    }
-/*    std::cout << "read frame_start=" << (int)frame_start1
-              << " protocol=" << protocol_h
-              << " len=" << bdata_len_h
-              << (int)frame_end1
-              << std::endl;
-*/  
+    }  
     return bdata_len_h;
 };
 

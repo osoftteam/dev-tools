@@ -4,6 +4,7 @@
 #include <cstring>
 #include <unordered_map>
 #include "dev-utils.h"
+#include "fix-utils.h"
 
 using std::cout;
 using std::endl;
@@ -38,34 +39,7 @@ static constexpr string_view ctag1_begin = BOLDGREEN;
 static constexpr string_view ctag2_begin = BOLDBLUE;
 static constexpr string_view ctag3_begin = BOLDMAGENTA;
 static constexpr string_view ctag_end    = RESET;
-
-string_view fixtype2name(cfix::fmsg fix)
-{
-    string_view name = "";
-    switch(fix){
-    case cfix::fmsg::NewOrd:      name = "[NEW]";break;
-    case cfix::fmsg::NewOrdML:    name = "[NEW-ML]";break;
-    case cfix::fmsg::ExecAck:     name = "[ACK]";break;
-    case cfix::fmsg::ExecPart:    name = "[PART]";break;
-    case cfix::fmsg::ExecFill:    name = "[FILL]";break;
-    case cfix::fmsg::ExecPartLeg: name = "[PART-LEG]";break;
-    case cfix::fmsg::ExecPartML:  name = "[PART-ML]";break;
-    case cfix::fmsg::ExecFillLeg: name = "[FILL-LEG]";break;
-    case cfix::fmsg::ExecFillML:  name = "[FILL-ML]";break;
-    case cfix::fmsg::CancelReq:   name = "[CANCEL-REQ]";break;
-    case cfix::fmsg::CancelPending:name = "[CANCEL-PEND]";break;
-    case cfix::fmsg::CancelReject: name = "[CANCEL-REJ]";break;
-    case cfix::fmsg::Canceled:    name = "[CANCELED]";break;
-    case cfix::fmsg::Reject:      name = "[REJECT]";break;
-    case cfix::fmsg::RplReqML:    name = "[RPL-ML-REQ]";break;
-    case cfix::fmsg::RplReq:      name = "[RPL-REQ]";break;
-    case cfix::fmsg::RplPending:  name = "[RPL-PEND]";break;
-    case cfix::fmsg::Replaced:    name = "[REPLACED]";break;
-    default:name = "";
-    }
-
-    return name;
-};
+static bool paint_fix_tags = true;
 
 string_view get_tag_value(const string_view& sfix, const string_view& _tag)
 {
@@ -79,24 +53,6 @@ string_view get_tag_value(const string_view& sfix, const string_view& _tag)
             rv = sfix.substr(start, pos_e - start);
         }
     }
-    return rv;
-};
-
-cfix::fmsg parse_message(const std::string& s, std::string& ord_id, std::string& original_ord_id)
-{
-    cfix::fix_view fv(s);
-    
-    ord_id = original_ord_id = "";
-    return fv.build_fix_view();
-}
-
-string analyse(const string& sfix)
-{
-    string ord_id = "";
-    string original_ord_id = "";
-    auto fix = parse_message(sfix, ord_id, original_ord_id);
-    auto fix_name= fixtype2name(fix);
-    string rv = YELLOW_ON_BLUE  + string(fix_name) + RESET;
     return rv;
 };
 
@@ -118,7 +74,7 @@ COLOR_TAGS load_tags(const char* env_variable_name, const char* default_tags)
 
     if(tags == nullptr)
         {
-            strncpy(tags_list, default_tags, sizeof(tags_list));
+            strncpy(tags_list, default_tags, sizeof(tags_list)-1);
             tags = strchr(tags_list, '=');
         }
 
@@ -139,9 +95,35 @@ COLOR_TAGS load_tags(const char* env_variable_name, const char* default_tags)
 
 void cfix::init_cfix()
 {
-    ctags1 = load_tags("COLORIZE_FIX_TAGS1", "COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44");
-    ctags2 = load_tags("COLORIZE_FIX_TAGS2", "COLORIZE_FIX_TAGS2=442:555:687:192:564:623:624:654:566");
-    ctags3 = load_tags("COLORIZE_FIX_TAGS3", "COLORIZE_FIX_TAGS3=17:640:11:12");
+    FILE *fp;
+    char tags_list[256];
+    char* tags = nullptr;
+ 
+    string cmd = string("env | grep COLORIZE_FIX_TAGS1");
+    fp = popen(cmd.c_str(), "r");
+    if(fp != nullptr){
+        if(fgets(tags_list, sizeof(tags_list), fp) != nullptr){
+            tags = strchr(tags_list, '=');
+        }
+    }
+    if(tags != nullptr && tags[0] != 0)
+    {
+        ++tags;
+
+        std::string val(tags);
+        val = dev::trim(val);
+        if(val == "none")
+        {
+            paint_fix_tags = false;
+        }
+    }
+    
+    if(paint_fix_tags)
+    {
+        ctags1 = load_tags("COLORIZE_FIX_TAGS1", "COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44");
+        ctags2 = load_tags("COLORIZE_FIX_TAGS2", "COLORIZE_FIX_TAGS2=442:555:687:192:564:623:624:654:566");
+        ctags3 = load_tags("COLORIZE_FIX_TAGS3", "COLORIZE_FIX_TAGS3=17:640:11:12");
+    }
 };
 
 void apply_cgroup(string& input_s, const string_view& ctag_begin, const COLOR_TAGS& tags)
@@ -173,176 +155,47 @@ void apply_cgroup(string& input_s, const string_view& ctag_begin, const COLOR_TA
     }
 }
 
+static void print_fix_string_in_color(std::string& s)
+{
+    dev::fixmsg_view fv(s);
+    auto fix = fv.build_fix_view();
+    auto fix_name = dev::fixtype2name(fix);
+    if(paint_fix_tags)
+    {
+        apply_cgroup(s, ctag1_begin, ctags1);
+        apply_cgroup(s, ctag2_begin, ctags2);
+        apply_cgroup(s, ctag2_begin, ctags3);
+        cout << YELLOW_ON_BLUE;
+    }
+    cout << fix_name; 
+    if(paint_fix_tags)
+    {   
+        cout << RESET;
+    }
+    cout << s;
+    cout << std::endl;
+    fv.print_tags();
+    cout << std::endl;
+};
+
 void cfix::colorize_stdin()
 {
     char buff[4096];
     memset(buff, 0, sizeof(buff));
     while(fgets(buff, sizeof(buff), stdin))
     {
-        string input_s(buff);
-        string fix_type = analyse(input_s);
-        apply_cgroup(input_s, ctag1_begin, ctags1);
-        apply_cgroup(input_s, ctag2_begin, ctags2);
-        apply_cgroup(input_s, ctag3_begin, ctags3);
-        cout << fix_type << input_s;
+        string s(buff);
+        print_fix_string_in_color(s);
     }
 };
 
 void cfix::run_test()
 {
-    dev::STRINGS lst = {"[23/03/2012 12:51:06.057245]8=FIX.4.4|9=334|35=AB|49=CLIHUB|56=FLINKI_PJ|115=CLIENT_PJ|116=CS1|50=A1|34=6|52=20120323-12:51:06.053|11=CAA0001|38=2000000|55=AUD/USD|15=AUD|40=D|117=0b4b91a825|54=1|167=NONE|554=HWfrfnUAKa|555=2|654=CAA0001_1|600=AUD/USD|588=20120328|687=1000000|624=2|566=1.057515|564=O|654=CAA0001_2|600=AUD/USD|588=20120405|687=1000000|624=1|566=1.057477|564=C|10=000|",
-        "8=FIX.4.4|9=473|35=D|34=5|49=SENDER2|52=20230122-20:56:57|56=TARGET3|11=80217_94596|22=5|48=AAPL|15=USD|21=3|38=111|40=1|54=2|55=AAPL|59=0|64=20221201|461=ABCD|77=O|202=145.0|207=OPRA|200=202301|120=USD|60=20230122-19:21:41.919|453=2|448=abcd|447=C|452=11|448=MyBank|447=B|452=29|541=20230120|228=1.00000000|6499=N|561=1.0|562=1.0|7647=TEST1-OVER-TEST2|957=2|958=BROKER_REASON|959=14|960=Execution Negotiated|958=PM|959=14|960=abcd|10=006|"};
-    
-    for(auto& s : lst)
+    auto& lst = dev::fixmsg_sample();       
+    for(auto& fx : lst)
     {
-        string fix_type = analyse(s);
-        apply_cgroup(s, ctag1_begin, ctags1);
-        apply_cgroup(s, ctag2_begin, ctags2);
-        apply_cgroup(s, ctag2_begin, ctags3);
-        cout << fix_type << s;
+        auto s = fx.second;
+        print_fix_string_in_color(s);
     }
 };
 
-using FTAGS = std::unordered_map<int, std::string_view>;
-void print_tags(const FTAGS& ftags)
-{
-    for(const auto& t : ftags)
-    {
-        std::cout << "(" << t.first << "," << t.second << ")" << "\n";
-    }
-}
-
-cfix::fix_view::fix_view(const std::string_view& fix)noexcept:m_fix(fix)
-{
-
-};
-
-
-cfix::fmsg cfix::fix_view::build_fix_view()
-{
-    m_message_type = cfix::fmsg::Uknown;
-    
-    FTAGS ftags;
-    auto p = std::begin(m_fix);
-    auto e = std::end(m_fix); 
-
-    auto ptag = p;
-    auto pval = p;
-    while(p != e)
-    {
-        while(p != e && *p != '=') ++p;
-        if(p == e)break;
-        std::string_view tag(ptag, p-ptag);
-        ++p;
-        pval = p;
-        while(p != e && *p != '|') ++p;
-
-        std::string_view val(pval, p-pval);       
-
-        //std::cout << "(" << tag << "," << val << ")" << "\n";
-
-        auto tag_num = atoi(tag.data());
-        switch(tag_num)
-        {
-        case 35:m_tag35 = val;break;
-        case 39:m_tag39 = val;break;
-        case 442:m_tag442 = val;break;
-        default:break;
-        }
-        ftags.emplace(tag_num, val); 
-
-        if(p == e)break;
-        ++p;
-        ptag = p;
-        if(p == e)break;
-        ++p;
-    }
-
-    if(!m_tag35.empty())
-    {
-        parse_message_type();
-    }
-    
-    print_tags(ftags);
-    return m_message_type;
-};
-
-void cfix::fix_view::parse_message_type()
-{
-    m_message_type = cfix::fmsg::Uknown;
-    auto size35 = m_tag35.size();
-    switch(size35)
-    {
-    case 0:return;
-    case 1:
-    {
-        switch(m_tag35[0])
-        {
-        case 'D':m_message_type = cfix::fmsg::NewOrd;break;
-        case 'F':m_message_type = cfix::fmsg::CancelReq;break;
-        case 'G':m_message_type = cfix::fmsg::RplReq;break;
-        case '9':m_message_type = cfix::fmsg::CancelReject;break;
-        case '3':m_message_type = cfix::fmsg::Reject;break;
-        case '8':
-        {
-            auto size39 = m_tag39.size();
-            switch(size39)
-            {
-            case 0:return;
-            case 1:
-            {
-                case '0':m_message_type = cfix::fmsg::ExecAck;break;
-                case '6':m_message_type = cfix::fmsg::CancelPending;break;
-                case '4':m_message_type = cfix::fmsg::Canceled;break;
-                case '8':m_message_type = cfix::fmsg::Reject;break;
-                case 'E':m_message_type = cfix::fmsg::RplPending;break;
-                case '5':m_message_type = cfix::fmsg::Replaced;break;
-                case '1':
-                {
-                    m_message_type = cfix::fmsg::ExecPart;
-                    auto size442 = m_tag442.size();
-                    switch(size442)
-                    {
-                    case 1:
-                    {
-                        switch(m_tag442[0])
-                        {
-                        case '2':m_message_type = cfix::fmsg::ExecPartLeg;break;
-                        case '3':m_message_type = cfix::fmsg::ExecPartML;break;
-                        }
-                    }break;
-                    }
-                }break;
-                case '2':
-                {
-                    m_message_type = cfix::fmsg::ExecPart;
-                    auto size442 = m_tag442.size();
-                    switch(size442)
-                    {
-                    case 1:
-                    {
-                        switch(m_tag442[0])
-                        {
-                        case '2':m_message_type = cfix::fmsg::ExecFillLeg;break;
-                        case '3':m_message_type = cfix::fmsg::ExecFillML;break;
-                        }
-                    }break;
-                    }
-                }break;                
-            }break;
-            default:return;
-            };
-        }break;///8
-        }
-    }break;///1byte in 35
-    case 2:
-    {
-        switch(m_tag35[1])
-        {
-        case 'B':m_message_type = cfix::fmsg::NewOrdML;break;
-        case 'C':m_message_type = cfix::fmsg::RplReqML;break;
-        default:return;
-        }        
-    }break;///2bytes in 35
-    }    
-};

@@ -1,10 +1,12 @@
 #pragma once
 #include <algorithm>
+#include <vector>
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <optional>
+#include <string_view>
 
 namespace dev
 {
@@ -15,7 +17,7 @@ namespace dev
     size_t stoui(const std::string_view& s);
     std::optional<dev::S2S> read_config(const std::string& file_name);    
     std::string& trim(std::string &s);    
-    std::string size_human(uint64_t bytes);
+    std::string size_human(uint64_t bytes, bool bytes_units = true);
     
     template<class IT>
     void print_pairs(IT b, IT e, const std::string sep = " ");
