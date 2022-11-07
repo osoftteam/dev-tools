@@ -5,7 +5,7 @@ add_compile_options(-Wall -Wextra -std=c++17 -O3)
 
 project("dev-test")
 find_package(GTest REQUIRED)
-set(DEVUTILS_DIR "/home/ykhodak/dev-tools/dev/utils")
+set(DEVUTILS_DIR "~/dev-tools/dev/utils")
 
 
 add_executable(test_add test_add.cpp)

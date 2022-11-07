@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
 #include "dev-utils.h"
-#include "tag_generator.h"
+#include "tag-generator.h"
 
 TEST(set_generator, parse)
 {
@@ -16,7 +16,6 @@ TEST(set_generator, parse)
             auto& v = r.value();
             dev::tag_generator_stringer sgf;
             std::visit(sgf, v);
-//            std::cout << "   variant index= [" << v.index() << "] rule=" << sgf.str() << std::endl;
             ASSERT_EQ(sgf.str(), s);
         }
     }

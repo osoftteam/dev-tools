@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.22)
 add_compile_options(-g -Wall -Wextra -std=c++17 -O3)
 project("cfix")
-set(DEVUTILS_DIR "/home/ykhodak/dev-tools/dev/utils")
+set(DEVUTILS_DIR "~/dev-tools/dev/utils")
 
 add_executable(cfix cfix_main.cpp cfix.cpp tcp_spinner.cpp)
 target_include_directories(cfix PRIVATE ${DEVUTILS_DIR})
