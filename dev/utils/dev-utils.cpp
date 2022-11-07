@@ -56,7 +56,7 @@ std::optional<dev::cfg_info> dev::read_config(const std::string& file_name)
                             if(t != 0)
                             {
                                 cfg.tags[t] = val;
-                                std::cout << "got-tag:" << prop << " @" << p << " t=" << t << std::endl;
+//                                std::cout << "got-tag:" << prop << " @" << p << " t=" << t << std::endl;
                             }
                         }
                         else

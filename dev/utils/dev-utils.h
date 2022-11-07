@@ -12,6 +12,7 @@ namespace dev
 {
     using S2S = std::unordered_map<std::string, std::string>;
     using T2S = std::unordered_map<size_t, std::string>;
+    using S2N = std::unordered_map<std::string, size_t>;
     using SSET = std::unordered_set<std::string>;
     using STRINGS = std::vector<std::string>;
 

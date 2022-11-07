@@ -14,9 +14,9 @@ TEST(set_generator, parse)
         if(r)
         {
             auto& v = r.value();
-            dev::tag_generator_stringer sgf;
-            std::visit(sgf, v);
-            ASSERT_EQ(sgf.str(), s);
+            std::string s2;
+            std::visit([&s2](auto&& g){s2 = g.to_string();}, v);
+            ASSERT_EQ(s2, s);
         }
     }
 }

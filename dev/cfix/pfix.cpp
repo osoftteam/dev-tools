@@ -1,10 +1,8 @@
-#include "cfix.h"
-#include <unordered_set>
 #include <iostream>
 #include <cstring>
-#include <unordered_map>
 #include "dev-utils.h"
 #include "fix-utils.h"
+#include "pfix.h"
 
 using std::cout;
 using std::endl;
@@ -40,21 +38,6 @@ static constexpr string_view ctag2_begin = BOLDBLUE;
 static constexpr string_view ctag3_begin = BOLDMAGENTA;
 static constexpr string_view ctag_end    = RESET;
 bool paint_fix_tags = true;
-
-string_view get_tag_value(const string_view& sfix, const string_view& _tag)
-{
-    string tag = string("|") + string(_tag) + "=";
-    string rv = "";
-    size_t pos_b = sfix.find(tag);
-    if(pos_b != string::npos){
-        size_t pos_e = sfix.find("|", pos_b + 3);
-        if(pos_e !=  string::npos){
-            size_t start = pos_b  + tag.length();
-            rv = sfix.substr(start, pos_e - start);
-        }
-    }
-    return rv;
-};
 
 COLOR_TAGS load_tags(const char* env_variable_name, const char* default_tags)
 {

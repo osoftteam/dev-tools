@@ -57,20 +57,45 @@ void dev::ctf_messenger::receive_packets()
     }
 };
 
-void dev::ctf_messenger::receive_fix_messages()
+class stat_tag_mapper
+{
+    dev::T2STAT& m_stat;
+public:
+    stat_tag_mapper(dev::T2STAT& stat):m_stat(stat){}
+    
+    bool map_tag(size_t tag, const std::string_view& sv)
+        {
+            auto i = m_stat.find(tag);
+            if(i != m_stat.end())
+            {
+                std::visit([&sv](auto&& st){st.update_stat(sv);}, i->second);
+            }
+            
+            return true;
+        };
+};
+
+template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
+template<class... Ts> overload(Ts...) -> overload<Ts...>;
+
+
+void dev::ctf_messenger::receive_fix_messages(T2STAT& stat)
 {
     auto session_start = time(nullptr);
     size_t pnum = 0;
     size_t total_received = 0;
     size_t print_time = 0;
+
+//    stat_stringer st_str;
+    stat_tag_mapper tm(stat);
     
     while(1)
     {
         auto bdata_len = read_packet();
         if(bdata_len <= 0)return;
         std::string_view s(m_buf, bdata_len);
-        dev::fixmsg_view f(s);
-
+        dev::fixmsg_view f(s, &tm);
+        
         if(print_all_data){
             std::cout << s << std::endl;
         }
@@ -85,7 +110,19 @@ void dev::ctf_messenger::receive_fix_messages()
             print_time = (size_t)time_delta;
             auto bpsec = int(total_received / time_delta);
             auto ppsec = int(pnum / time_delta);
-            std::cout << "#" << pnum << " " << dev::size_human(ppsec, false) << "msg/sec " << " " << dev::size_human(bpsec) << "/sec" << std::endl;
+            std::cout << "#" << pnum << " "
+                      << dev::size_human(ppsec, false) << "msg/sec " << " "
+                      << dev::size_human(bpsec) << "/sec ";
+
+            for(const auto& i : stat)
+            {
+                std::cout << i.first << "=";
+                std::visit([](auto&& st){std::cout << st;}, i.second);
+                std::cout << "  ";
+            }
+            
+            
+           std::cout << std::endl;
         }
     }
 };
@@ -156,23 +193,21 @@ void dev::ctf_messenger::spin_packets(char* bdata, uint32_t bdata_len)
     }    
 };
 
-void dev::ctf_messenger::generate_fix_packets(const dev::fixmsg_view& fv, const dev::T2G& generators)
+void dev::ctf_messenger::generate_fix_packets(const dev::fixmsg_view<no_tag_mapper>& fv, const dev::T2G& generators)
 {
     std::cout << "starting fix-generator on template[" << fv.strv() << "]\n";
     
     std::string fix_str;
     fix_str.reserve(256);
-    tag_generator_value gv;
 
     auto session_start = time(nullptr);
     size_t pnum = 0;
     size_t total_sent = 0;
     size_t print_time = 0;
 
-    tag_generator_init gi;
     for(const auto& j : generators)
     {
-        std::visit(gi, j.second);
+        std::visit([](auto&& g){g.init();}, j.second);
     }
     
 
@@ -193,16 +228,11 @@ void dev::ctf_messenger::generate_fix_packets(const dev::fixmsg_view& fv, const 
             }
             else
             {
-                std::visit(gv, j->second);
-                fix_str.append(gv.value());
-//                std::cout << "gen: " << i.tag << " " << gv.value() << std::endl;
+                std::visit([&fix_str](auto&& g){fix_str.append(g.next());}, j->second);
             }
 
             fix_str.append("|");
-        }
-
-//        std::cout << "2send: " << fix_str << std::endl;
-        
+        }        
 
         /// send packet ///
         const char* bdata = fix_str.c_str();

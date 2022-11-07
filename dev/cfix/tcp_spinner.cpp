@@ -63,13 +63,10 @@ bool read_full_config_file()
             }
         }
 
-        dev::tag_generator_stringer gs;
         for(const auto& i : cfg.tag_generators)
         {
-            std::visit(gs, i.second);
-            std::cout << "tag-generator: " << i.first << "->" << gs.str() << "\n";
-        }
-        
+            std::visit([](auto&& g){std::cout << "tag-generator: "<< g << "\n";}, i.second);
+        }        
         
         const dev::S2S& m = cfg_info.params;
         std::string prop_val = "";
@@ -212,6 +209,8 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
 
 void serve_client(int skt)
 {
+    check_read_partial_config_file();
+    
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
     m.spin_packets(prc.bdata, prc.bdata_len);
@@ -219,25 +218,39 @@ void serve_client(int skt)
 
 void serve_client_with_fix_generator(int skt)
 {
+    check_read_partial_config_file();
+    
     std::string_view s(prc.bdata, prc.bdata_len);
     dev::fixmsg_view fv(s);
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.generate_fix_packets(fv, cfg.tag_generators);    
+    m.generate_fix_packets(fv, cfg.tag_generators);
 };
 
 void read_client_packets(int skt)
 {
+    check_read_partial_config_file();
+    
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
     m.receive_packets();
 }
 
+
 void read_client_fix_packets(int skt)
 {
+    check_read_partial_config_file();
+
+    dev::T2STAT stat;
+    for(const auto& i : cfg.tag_generators)
+    {
+        auto tag = i.first;
+        std::visit([&stat, &tag](auto&& g){auto v = g.make_tag_stat();stat[tag] = v;}, i.second);
+    }
+    
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.receive_fix_messages();
+    m.receive_fix_messages(stat);
 };
 
 bool load_data_file(const std::string& name)

@@ -8,6 +8,4 @@ namespace cfix
     void init_cfix();
     void colorize_stdin();
     void run_test();
-
-
 };
