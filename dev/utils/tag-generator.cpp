@@ -1,4 +1,9 @@
-#include "tag_generator.h"
+#include "tag-generator.h"
+
+void dev::data_set_tag_generator::init()const
+{
+    m_it = m_data.cbegin();
+};
 
 std::string dev::data_set_tag_generator::next()const
 {
@@ -24,11 +29,17 @@ std::string dev::data_set_tag_generator::rule_to_string()const
     return rv;
 };
 
+void dev::dense_range_tag_generator::init()const
+{
+    m_value = m_range_begin;
+};
+
 std::string dev::dense_range_tag_generator::next()const
 {
     if(m_value >= m_range_end)m_value = m_range_begin;
+    auto rv = std::to_string(m_value);
     m_value += m_range_step;
-    return std::to_string(m_value);
+    return rv;
 };
 
 std::string dev::dense_range_tag_generator::rule_to_string()const

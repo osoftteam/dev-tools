@@ -6,7 +6,10 @@
 #include <signal.h>
 #include <iomanip>
 #include "tcp_spinner.h"
-#include "tag_generator.h"
+#include "tag-generator.h"
+
+extern bool paint_fix_tags;
+bool print_all_data = false;
 
 void display_verbose_tags_info()
 {
@@ -50,7 +53,17 @@ void display_help(const char* n)
     std::cout << "Example: " << n << " -s ctf-server" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -s ctf-client" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -s fix-server" << " -f data/spin.properties\n";
+    std::cout << "Example: " << n << " -s gfix-server" << " -f data/spin.properties\n";    
     std::cout << "Example: " << n << " -s fix-client" << " -f data/spin.properties\n";
+    std::cout << std::endl;
+    std::cout << "-A - asci/plain text only, no color tags, same as COLORIZE_FIX_TAGS1=none\n";
+    std::cout << "-P - print data, busy screen\n";
+    std::cout << "-s start as..\n";
+    std::cout << "    ctf-server - send data wrapped in CTF-packets\n";
+    std::cout << "    ctf-client - consume CTF-packets\n";
+    std::cout << "    fix-server - send fix messages wrapped in CTF-packets\n";
+    std::cout << "    fix-client - consume(parse) fix messages in CTF-packets\n";
+    std::cout << "    gfix-server -generate&send fix messages out of template using config 'tag' options\n";
     std::cout << std::endl;
     std::cout << " env: COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44 COLORIZE_FIX_TAGS2..3\n";
     std::cout << " env: COLORIZE_FIX_TAGS1=none  for 'no-color'\n";
@@ -65,11 +78,13 @@ int main(int argc, char* argv[])
     signal(SIGPIPE, SIGPIPE_handler);
     std::string cfg_file, runmode;
     cfix::init_cfix();
+    bool runtest = false;
 
+    
     if(argc > 1)
     {
         int opt;
-        while ((opt = getopt(argc, argv, "vhtf:s:")) != -1) {
+        while ((opt = getopt(argc, argv, "vhtf:s:AP")) != -1) {
             switch(opt)
             {
             case 'v':
@@ -84,21 +99,34 @@ int main(int argc, char* argv[])
             }break;
             case 't':
             {
-                cfix::run_test();
-                std::cout << std::endl;
-                return 0;
+                runtest = true;
             }break;
             case 'f':
-            {
+            {                
                 cfg_file = optarg;
             }break;
             case 's':
             {                
                 runmode = optarg;
-            }            
+            }break;
+            case 'A':
+            {
+                paint_fix_tags = false;
+            }break;
+            case 'P':
+            {
+                print_all_data = true;
+            }break;            
             }
         }//while options
-
+        
+        if(runtest)
+        {
+            cfix::run_test();
+            std::cout << std::endl;
+            return 0;            
+        }
+        
         if(cfg_file.empty()){
             std::cout << "ERROR: expected configuration file\n\n";
             display_help(argv[0]);

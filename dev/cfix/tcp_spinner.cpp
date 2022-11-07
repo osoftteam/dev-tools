@@ -7,6 +7,8 @@
 #include <sys/stat.h>
 #include "ctf-messenger.h"
 #include "skt-utils.h"
+#include "tag-generator.h"
+#include "fix-utils.h"
 
 enum class erunmode
 {
@@ -14,6 +16,7 @@ enum class erunmode
     server,
     client,
     fix_server,
+    gfix_server,
     fix_client,
 };
 
@@ -27,6 +30,7 @@ struct spin_cfg
     size_t        spin_sleep_msec{100};
     std::string   cfg_file_path;
     time_t        cfg_read_time;
+    dev::T2G      tag_generators;
 } cfg;
 
 struct spin_state{
@@ -37,6 +41,7 @@ struct spin_state{
 
 bool load_data_file(const std::string& name);
 void serve_client(int skt);
+void serve_client_with_fix_generator(int skt);
 void read_client_packets(int skt);
 void read_client_fix_packets(int skt);
 
@@ -49,7 +54,24 @@ bool read_full_config_file()
     auto r = dev::read_config(cfg.cfg_file_path);
     if(r)
     {
-        const dev::S2S& m = r.value();
+        auto& cfg_info  = r.value();
+        cfg.tag_generators.clear();
+        for(const auto& i : cfg_info.tags){
+            auto j = dev::tag_generator_factory::produce_generator(i.second);
+            if(j){
+                cfg.tag_generators.emplace(i.first, std::move(j.value()));
+            }
+        }
+
+        dev::tag_generator_stringer gs;
+        for(const auto& i : cfg.tag_generators)
+        {
+            std::visit(gs, i.second);
+            std::cout << "tag-generator: " << i.first << "->" << gs.str() << "\n";
+        }
+        
+        
+        const dev::S2S& m = cfg_info.params;
         std::string prop_val = "";
         auto i =  m.begin();
 
@@ -62,13 +84,16 @@ bool read_full_config_file()
         cfg.spin_sleep_msec = std::stoi(prop_val);
        
         if(cfg.rmode == erunmode::server){
-            if(!load_data_file(cfg.data_file)){
+            if(!load_data_file(cfg.data_file))
+            {
                 std::cout << "ERROR loading data file [" << cfg.data_file << "]\n";
                 return false;
             }
         }
-        else if(cfg.rmode == erunmode::fix_server){
-            if(!load_data_file(cfg.fix_template)){
+        else if(cfg.rmode == erunmode::fix_server ||
+                cfg.rmode == erunmode::gfix_server){
+            if(!load_data_file(cfg.fix_template))
+            {
                 std::cout << "ERROR loading data file [" << cfg.fix_template << "]\n";
                 return false;
             }            
@@ -94,19 +119,23 @@ bool check_read_partial_config_file()
             auto r = dev::read_config(cfg.cfg_file_path);
             if(r)
             {
-                const dev::S2S& m = r.value();
+                auto& cfg_info  = r.value();
+                const dev::S2S& m = cfg_info.params;                
                 std::string prop_val = "";
                 auto i =  m.begin();
                 CHECK_CFG_FIELD("data-file", cfg.data_file);
                 CHECK_CFG_FIELD("spin-sleep-msec", prop_val);
                 cfg.spin_sleep_msec = std::stoi(prop_val);
     
-                if(cfg.rmode == erunmode::server){
+                if(cfg.rmode == erunmode::server)
+                {
                     if(!load_data_file(cfg.data_file)){
                         return false;
                     }
                 }
-                else if(cfg.rmode == erunmode::fix_server){
+                else if(cfg.rmode == erunmode::fix_server ||
+                        cfg.rmode == erunmode::gfix_server)
+                {
                     if(!load_data_file(cfg.fix_template)){
                         std::cout << "ERROR loading data file [" << cfg.fix_template << "]\n";
                         return false;
@@ -136,6 +165,10 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
     {
         cfg.rmode = erunmode::fix_server;
     }
+    else if(_runmode == std::string("gfix-server"))
+    {
+        cfg.rmode = erunmode::gfix_server;
+    }    
     else if(_runmode == std::string("fix-client"))
     {
         cfg.rmode = erunmode::fix_client;
@@ -160,6 +193,10 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
     {
         dev::run_socket_server(cfg.host, cfg.port, serve_client);
     }break;
+    case erunmode::gfix_server:
+    {
+        dev::run_socket_server(cfg.host, cfg.port, serve_client_with_fix_generator);
+    }break;
     case erunmode::client:
     {
         dev::run_socket_client(cfg.host, cfg.port, read_client_packets);
@@ -178,6 +215,15 @@ void serve_client(int skt)
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
     m.spin_packets(prc.bdata, prc.bdata_len);
+};
+
+void serve_client_with_fix_generator(int skt)
+{
+    std::string_view s(prc.bdata, prc.bdata_len);
+    dev::fixmsg_view fv(s);
+    dev::ctf_messenger m;
+    m.init(skt, cfg.spin_sleep_msec);
+    m.generate_fix_packets(fv, cfg.tag_generators);    
 };
 
 void read_client_packets(int skt)

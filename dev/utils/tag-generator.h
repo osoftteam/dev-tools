@@ -11,6 +11,7 @@ namespace dev
         STRINGS m_data;
         mutable STRINGS::const_iterator m_it;
     public:
+        void init()const;
         std::string next()const;
         std::string rule_to_string()const;
         friend class tag_generator_factory;
@@ -23,6 +24,7 @@ namespace dev
         size_t m_range_begin{}, m_range_end{}, m_range_step{};
         mutable size_t m_value{};
     public:
+        void init()const;
         std::string next()const;
         std::string rule_to_string()const;
         friend class tag_generator_factory;
@@ -33,7 +35,7 @@ namespace dev
     class tag_generator_factory
     {
     public:
-        std::optional<var_generator> produce_generator(const std::string_view& s);
+        static std::optional<var_generator> produce_generator(const std::string_view& s);
     };
 
     class tag_generator_stringer
@@ -45,4 +47,25 @@ namespace dev
     private:
         mutable std::string m_rule_str;
     };
+
+    class tag_generator_value
+    {
+    public:
+        void operator()(const data_set_tag_generator& g)const{m_value = g.next();}
+        void operator()(const dense_range_tag_generator& g)const{m_value = g.next();}
+        std::string value()const{return m_value;}
+    private:
+        mutable std::string m_value;
+    };
+
+    class tag_generator_init
+    {
+    public:
+        void operator()(const data_set_tag_generator& g)const{g.init();}
+        void operator()(const dense_range_tag_generator& g)const{g.init();}
+    };
+
+    
+    
+    using T2G = std::unordered_map<size_t, var_generator>;
 }

@@ -3,6 +3,7 @@
 #include "ctf-messenger.h"
 #include "fix-utils.h"
 
+extern bool print_all_data;
 static char frame_start    {4};
 static char frame_end      {3};
 static uint16_t protocol   {32};
@@ -39,6 +40,11 @@ void dev::ctf_messenger::receive_packets()
         if(bdata_len <= 0)return;
         total_received += bdata_len;
         ++pnum;
+
+        if(print_all_data){
+            m_buf[bdata_len+1] = 0;
+            std::cout << m_buf << std::endl;
+        }
         
         auto now = time(nullptr);
         auto time_delta = now - session_start;
@@ -64,11 +70,10 @@ void dev::ctf_messenger::receive_fix_messages()
         if(bdata_len <= 0)return;
         std::string_view s(m_buf, bdata_len);
         dev::fixmsg_view f(s);
-        f.build_fix_view();
-        //auto msg_type = f.message_type();
-        //std::cout << dev::fixtype2name(msg_type);
-        //f.print_tags();
-        //std::cout << std::endl;
+
+        if(print_all_data){
+            std::cout << s << std::endl;
+        }
         
         total_received += bdata_len;
         ++pnum;
@@ -149,4 +154,76 @@ void dev::ctf_messenger::spin_packets(char* bdata, uint32_t bdata_len)
             std::cout << "#" << pnum << " " << dev::size_human(total_sent) << " " << dev::size_human(bpsec) << "/sec" << std::endl;
         }
     }    
+};
+
+void dev::ctf_messenger::generate_fix_packets(const dev::fixmsg_view& fv, const dev::T2G& generators)
+{
+    std::cout << "starting fix-generator on template[" << fv.strv() << "]\n";
+    
+    std::string fix_str;
+    fix_str.reserve(256);
+    tag_generator_value gv;
+
+    auto session_start = time(nullptr);
+    size_t pnum = 0;
+    size_t total_sent = 0;
+    size_t print_time = 0;
+
+    tag_generator_init gi;
+    for(const auto& j : generators)
+    {
+        std::visit(gi, j.second);
+    }
+    
+
+    while(1)
+    {
+        /// generate packet ///
+        fix_str.clear();
+        const auto& tags = fv.tags();
+        for(const auto& i : tags)
+        {
+            fix_str.append(i.tag_s);
+            fix_str.append("=");
+        
+            auto j = generators.find(i.tag);
+            if(j == generators.end())
+            {
+                fix_str.append(i.value);
+            }
+            else
+            {
+                std::visit(gv, j->second);
+                fix_str.append(gv.value());
+//                std::cout << "gen: " << i.tag << " " << gv.value() << std::endl;
+            }
+
+            fix_str.append("|");
+        }
+
+//        std::cout << "2send: " << fix_str << std::endl;
+        
+
+        /// send packet ///
+        const char* bdata = fix_str.c_str();
+        uint32_t bdata_len = fix_str.size();
+        if(!send_packet((char*)bdata, bdata_len))return;
+        
+        if(m_spin_sleep_time_ms > 0)
+        {
+            std::this_thread::sleep_for(std::chrono::milliseconds(m_spin_sleep_time_ms));
+        }
+
+        total_sent += bdata_len;
+        ++pnum;
+        
+        auto now = time(nullptr);
+        auto time_delta = now - session_start;
+        if(print_time != (size_t)time_delta && time_delta%2 == 0)
+        {
+            print_time = (size_t)time_delta;
+            auto bpsec = int(total_sent / time_delta);
+            std::cout << "#" << pnum << " " << dev::size_human(total_sent) << " " << dev::size_human(bpsec) << "/sec" << std::endl;
+        }        
+    }
 };

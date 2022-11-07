@@ -1,15 +1,19 @@
 #pragma once
 #include "dev-utils.h"
+#include "tag-generator.h"
 
 #define RECEIVE_BUFF_SIZE 100000
 
 namespace dev
 {
+    class fixmsg_view;
+    
     class ctf_messenger
     {
     public:
         bool init(int skt, size_t spin_sleep_time_ms);
         void spin_packets(char* bdata, uint32_t bdata_len);
+        void generate_fix_packets(const dev::fixmsg_view& fv, const dev::T2G& generators);
         void receive_packets();
         void receive_fix_messages();
     private:

@@ -28,14 +28,14 @@ size_t dev::stoui(const std::string_view& s)
     return rv;
 }
 
-std::optional<dev::S2S> dev::read_config(const std::string& file_name)
+std::optional<dev::cfg_info> dev::read_config(const std::string& file_name)
 {    
-    std::optional<S2S>rv = {};    
+    std::optional<dev::cfg_info>rv = {};    
     std::string s;
     std::ifstream f (file_name);
     if (f.is_open())
     {
-        S2S m;
+        cfg_info cfg;
         while ( getline (f, s) )
         {
             s = dev::trim(s);
@@ -47,13 +47,27 @@ std::optional<dev::S2S> dev::read_config(const std::string& file_name)
                 val = dev::trim(val);
                 if(!prop.empty() && !val.empty())
                 {
-                    if(prop[0] != '#'){
-                        m[prop] = val;
+                    if(prop[0] != '#')
+                    {
+                        p = prop.find("tag.");
+                        if(p == 0)
+                        {
+                            auto t = dev::stoui(prop.substr(4));
+                            if(t != 0)
+                            {
+                                cfg.tags[t] = val;
+                                std::cout << "got-tag:" << prop << " @" << p << " t=" << t << std::endl;
+                            }
+                        }
+                        else
+                        {
+                            cfg.params[prop] = val;
+                        }
                     }
                 }
             }
         }
-        rv.emplace(std::move(m));
+        rv.emplace(std::move(cfg));
         f.close();
     }    
     else

@@ -39,7 +39,7 @@ static constexpr string_view ctag1_begin = BOLDGREEN;
 static constexpr string_view ctag2_begin = BOLDBLUE;
 static constexpr string_view ctag3_begin = BOLDMAGENTA;
 static constexpr string_view ctag_end    = RESET;
-static bool paint_fix_tags = true;
+bool paint_fix_tags = true;
 
 string_view get_tag_value(const string_view& sfix, const string_view& _tag)
 {
@@ -95,34 +95,37 @@ COLOR_TAGS load_tags(const char* env_variable_name, const char* default_tags)
 
 void cfix::init_cfix()
 {
-    FILE *fp;
-    char tags_list[256];
-    char* tags = nullptr;
- 
-    string cmd = string("env | grep COLORIZE_FIX_TAGS1");
-    fp = popen(cmd.c_str(), "r");
-    if(fp != nullptr){
-        if(fgets(tags_list, sizeof(tags_list), fp) != nullptr){
-            tags = strchr(tags_list, '=');
-        }
-    }
-    if(tags != nullptr && tags[0] != 0)
-    {
-        ++tags;
-
-        std::string val(tags);
-        val = dev::trim(val);
-        if(val == "none")
-        {
-            paint_fix_tags = false;
-        }
-    }
-    
     if(paint_fix_tags)
     {
-        ctags1 = load_tags("COLORIZE_FIX_TAGS1", "COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44");
-        ctags2 = load_tags("COLORIZE_FIX_TAGS2", "COLORIZE_FIX_TAGS2=442:555:687:192:564:623:624:654:566");
-        ctags3 = load_tags("COLORIZE_FIX_TAGS3", "COLORIZE_FIX_TAGS3=17:640:11:12");
+        FILE *fp;
+        char tags_list[256];
+        char* tags = nullptr;
+ 
+        string cmd = string("env | grep COLORIZE_FIX_TAGS1");
+        fp = popen(cmd.c_str(), "r");
+        if(fp != nullptr){
+            if(fgets(tags_list, sizeof(tags_list), fp) != nullptr){
+                tags = strchr(tags_list, '=');
+            }
+        }
+        if(tags != nullptr && tags[0] != 0)
+        {
+            ++tags;
+
+            std::string val(tags);
+            val = dev::trim(val);
+            if(val == "none")
+            {
+                paint_fix_tags = false;
+            }
+        }
+    
+        if(paint_fix_tags)
+        {
+            ctags1 = load_tags("COLORIZE_FIX_TAGS1", "COLORIZE_FIX_TAGS1=14:32:35:38:39:40:59:150:151:44");
+            ctags2 = load_tags("COLORIZE_FIX_TAGS2", "COLORIZE_FIX_TAGS2=442:555:687:192:564:623:624:654:566");
+            ctags3 = load_tags("COLORIZE_FIX_TAGS3", "COLORIZE_FIX_TAGS3=17:640:11:12");
+        }
     }
 };
 
@@ -158,7 +161,7 @@ void apply_cgroup(string& input_s, const string_view& ctag_begin, const COLOR_TA
 static void print_fix_string_in_color(std::string& s)
 {
     dev::fixmsg_view fv(s);
-    auto fix = fv.build_fix_view();
+    auto fix = fv.message_type();
     auto fix_name = dev::fixtype2name(fix);
     if(paint_fix_tags)
     {
@@ -166,7 +169,7 @@ static void print_fix_string_in_color(std::string& s)
         apply_cgroup(s, ctag2_begin, ctags2);
         apply_cgroup(s, ctag2_begin, ctags3);
         cout << YELLOW_ON_BLUE;
-    }
+    }    
     cout << fix_name; 
     if(paint_fix_tags)
     {   

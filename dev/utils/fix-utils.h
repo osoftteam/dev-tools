@@ -31,6 +31,7 @@ namespace dev
     struct fixtag_value
     {
         size_t           tag;
+        std::string_view tag_s;
         std::string_view value;
     };
     using FIXTAGS = std::vector<fixtag_value>;
@@ -40,7 +41,7 @@ namespace dev
     {
     public:
         fixmsg_view(const std::string_view& fix)noexcept;
-        fixmsg build_fix_view();
+        const std::string_view& strv()const{return m_fix;}
         fixmsg message_type()const{return m_message_type;}
         const FIXTAGS& tags()const{return m_tags;}
         void print_tags()const;

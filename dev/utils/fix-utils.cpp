@@ -2,13 +2,6 @@
 
 dev::fixmsg_view::fixmsg_view(const std::string_view& fix)noexcept:m_fix(fix)
 {
-
-};
-
-dev::fixmsg dev::fixmsg_view::build_fix_view()
-{
-    m_message_type = dev::fixmsg::Uknown;
-    m_tags.clear();
     m_tags.reserve(32);
     
     auto p = std::begin(m_fix);
@@ -25,12 +18,9 @@ dev::fixmsg dev::fixmsg_view::build_fix_view()
         pval = p;
         while(p != e && *p != '|') ++p;
 
-        std::string_view val(pval, p-pval);       
-
-        //std::cout << "(" << tag << "," << val << ")" << "\n";
+        std::string_view val(pval, p-pval);
 
         auto tag_num = dev::stoui(tag);
-//        std::cout  << " " << tag_num << "=(" << tag << "," << val << ")" << "\n";
         switch(tag_num)
         {
         case 35:m_tag35 = val;break;
@@ -38,7 +28,7 @@ dev::fixmsg dev::fixmsg_view::build_fix_view()
         case 442:m_tag442 = val;break;
         default:break;
         }
-        m_tags.emplace_back(fixtag_value{tag_num, val});
+        m_tags.emplace_back(fixtag_value{tag_num, tag, val});
 
         if(p == e)break;
         ++p;
@@ -51,9 +41,8 @@ dev::fixmsg dev::fixmsg_view::build_fix_view()
     {
         parse_message_type();
     }
-    
-    return m_message_type;
 };
+
 
 void dev::fixmsg_view::parse_message_type()
 {

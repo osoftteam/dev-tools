@@ -11,11 +11,18 @@
 namespace dev
 {
     using S2S = std::unordered_map<std::string, std::string>;
+    using T2S = std::unordered_map<size_t, std::string>;
     using SSET = std::unordered_set<std::string>;
     using STRINGS = std::vector<std::string>;
 
+    struct cfg_info
+    {
+        dev::S2S params;
+        dev::T2S tags;
+    };
+    
     size_t stoui(const std::string_view& s);
-    std::optional<dev::S2S> read_config(const std::string& file_name);    
+    std::optional<cfg_info> read_config(const std::string& file_name);    
     std::string& trim(std::string &s);    
     std::string size_human(uint64_t bytes, bool bytes_units = true);
     
