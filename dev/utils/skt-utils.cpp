@@ -4,7 +4,7 @@
 #include <arpa/inet.h>
 #include <string.h>
 
-void dev::run_socket_server(std::string host, size_t port, client_serve_fn serve_fn)
+void dev::run_tcp_server(std::string host, size_t port, client_serve_fn serve_fn)
 {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -61,7 +61,7 @@ void dev::run_socket_server(std::string host, size_t port, client_serve_fn serve
     }
 };
 
-void dev::run_socket_client(std::string host, size_t port, client_serve_fn serve_fn)
+void dev::run_tcp_client(std::string host, size_t port, client_serve_fn serve_fn)
 {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -102,3 +102,47 @@ void dev::run_socket_client(std::string host, size_t port, client_serve_fn serve
         serve_fn(skt_fd);
     }
 };
+
+void dev::run_udp_server(std::string host, size_t port, const HOST_PORT_ARR& hp_arr, client_serve_fn fn)
+{
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    auto skt_fd = socket(AF_INET, SOCK_DGRAM, 0);
+    
+    if (skt_fd < 0) {
+        perror("server/socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    int opt = 1;
+    if (setsockopt(skt_fd, SOL_SOCKET,
+                   SO_REUSEADDR | SO_REUSEPORT, &opt,
+                   sizeof(opt)))
+    {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
+
+    memset(&address, 0 , sizeof(address));
+    address.sin_family = AF_INET;
+    inet_pton(AF_INET, host.c_str(), &(address.sin_addr));
+    address.sin_port = htons(port);
+
+    if (bind(skt_fd, (struct sockaddr*)&address, addrlen) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    while(true)
+    {
+        std::cout << "udp svr.. " << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(800));
+    }    
+};
+
+void dev::run_udp_client(std::string host, size_t port, const host_port& cl_hp, client_serve_fn fn)
+{
+    std::cout << "dev::run_udp_client " << cl_hp.host << " " << cl_hp.port << std::endl;
+};
+

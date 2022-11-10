@@ -7,6 +7,7 @@
 #include <fstream>
 #include <optional>
 #include <string_view>
+#include <thread>
 
 namespace dev
 {

@@ -4,6 +4,8 @@
 #include "fix-utils.h"
 
 extern bool print_all_data;
+extern bool collect_statistics;
+
 static char frame_start    {4};
 static char frame_end      {3};
 static uint16_t protocol   {32};
@@ -75,9 +77,10 @@ public:
         };
 };
 
+/*
 template<class... Ts> struct overload : Ts... { using Ts::operator()...; };
 template<class... Ts> overload(Ts...) -> overload<Ts...>;
-
+*/
 
 void dev::ctf_messenger::receive_fix_messages(T2STAT& stat)
 {
@@ -86,15 +89,15 @@ void dev::ctf_messenger::receive_fix_messages(T2STAT& stat)
     size_t total_received = 0;
     size_t print_time = 0;
 
-//    stat_stringer st_str;
     stat_tag_mapper tm(stat);
+    auto tm_ptr = collect_statistics ? &tm : nullptr;
     
     while(1)
     {
         auto bdata_len = read_packet();
         if(bdata_len <= 0)return;
         std::string_view s(m_buf, bdata_len);
-        dev::fixmsg_view f(s, &tm);
+        dev::fixmsg_view f(s, tm_ptr);
         
         if(print_all_data){
             std::cout << s << std::endl;
@@ -114,15 +117,16 @@ void dev::ctf_messenger::receive_fix_messages(T2STAT& stat)
                       << dev::size_human(ppsec, false) << "msg/sec " << " "
                       << dev::size_human(bpsec) << "/sec ";
 
-            for(const auto& i : stat)
+            if(collect_statistics)
             {
-                std::cout << i.first << "=";
-                std::visit([](auto&& st){std::cout << st;}, i.second);
-                std::cout << "  ";
-            }
-            
-            
-           std::cout << std::endl;
+                for(const auto& i : stat)
+                {
+                    std::cout << i.first << "=";
+                    std::visit([](auto&& st){std::cout << st;}, i.second);
+                    std::cout << "  ";
+                }
+            }           
+            std::cout << std::endl;
         }
     }
 };

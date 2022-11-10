@@ -10,6 +10,9 @@
 #include "tag-generator.h"
 #include "fix-utils.h"
 
+extern bool use_tcp_protocol;
+extern std::string selected_upd_client;
+
 enum class erunmode
 {
     none,
@@ -22,15 +25,17 @@ enum class erunmode
 
 struct spin_cfg
 {
-    erunmode       rmode{erunmode::none};
-    std::string   host;
-    size_t        port;
-    std::string   data_file;
-    std::string   fix_template;    
-    size_t        spin_sleep_msec{100};
-    std::string   cfg_file_path;
-    time_t        cfg_read_time;
-    dev::T2G      tag_generators;
+    erunmode             rmode{erunmode::none};
+    std::string          host;
+    size_t               port;
+    dev::HOST_PORT_ARR   client_host_ports;
+    dev::host_port       udp_cl_hp;
+    std::string          data_file;
+    std::string          fix_template;    
+    size_t               spin_sleep_msec{100};
+    std::string          cfg_file_path;
+    time_t               cfg_read_time;
+    dev::T2G             tag_generators;
 } cfg;
 
 struct spin_state{
@@ -78,8 +83,34 @@ bool read_full_config_file()
         CHECK_OPT_CFG_FIELD("data-file", cfg.data_file);
         CHECK_OPT_CFG_FIELD("fix-template", cfg.fix_template);
         CHECK_CFG_FIELD("spin-sleep-msec", prop_val);
-        cfg.spin_sleep_msec = std::stoi(prop_val);
-       
+        cfg.spin_sleep_msec = dev::stoui(prop_val);
+
+        for(int j = 0; j < 10; ++j){
+            std::string client_name = std::string("client") + std::to_string(j);
+            std::string prefix = client_name + ".";
+            dev::host_port hp;
+
+            i = m.find(prefix + "host");
+            if(i != m.end()){
+                hp.host = i->second;
+            }
+            i = m.find(prefix + "port");
+            if(i != m.end()){
+                hp.port = dev::stoui(i->second);
+            }            
+            if(!hp.host.empty() && hp.port > 0)
+            {
+                cfg.client_host_ports.push_back(hp);
+                std::cout << "cfg client" << j << "(h,p) = (" << hp.host << "," << hp.port << ")\n";
+                if(client_name == selected_upd_client)
+                {
+                    cfg.udp_cl_hp = hp;
+                    std::cout << "cfg selected udp client [" << selected_upd_client << "]";
+                }
+            }
+        }
+
+        
         if(cfg.rmode == erunmode::server){
             if(!load_data_file(cfg.data_file))
             {
@@ -188,19 +219,47 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
     case erunmode::server:
     case erunmode::fix_server:
     {
-        dev::run_socket_server(cfg.host, cfg.port, serve_client);
+        if(use_tcp_protocol){
+            dev::run_tcp_server(cfg.host, cfg.port, serve_client);
+        }
+        else{
+            dev::run_udp_server(cfg.host, cfg.port, cfg.client_host_ports, serve_client);
+        }
     }break;
     case erunmode::gfix_server:
     {
-        dev::run_socket_server(cfg.host, cfg.port, serve_client_with_fix_generator);
+        if(use_tcp_protocol){
+            dev::run_tcp_server(cfg.host, cfg.port, serve_client_with_fix_generator);
+        }
+        else{
+            dev::run_udp_server(cfg.host, cfg.port, cfg.client_host_ports, serve_client_with_fix_generator);
+        }
     }break;
     case erunmode::client:
     {
-        dev::run_socket_client(cfg.host, cfg.port, read_client_packets);
+        if(use_tcp_protocol){
+            dev::run_tcp_client(cfg.host, cfg.port, read_client_packets);
+        }
+        else{
+            if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
+                std::cout << "ERROR. UDP client bind host/port not defined";
+                return;
+            }
+            dev::run_udp_client(cfg.host, cfg.port, cfg.udp_cl_hp, read_client_packets);
+        }
     }break;
     case erunmode::fix_client:
     {
-        dev::run_socket_client(cfg.host, cfg.port, read_client_fix_packets);
+        if(use_tcp_protocol){
+            dev::run_tcp_client(cfg.host, cfg.port, read_client_fix_packets);
+        }
+        else{
+            if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
+                std::cout << "ERROR. UDP client bind host/port not defined";
+                return;
+            }            
+            dev::run_udp_client(cfg.host, cfg.port, cfg.udp_cl_hp, read_client_fix_packets);
+        }
     }break;
     default:break;
     }
