@@ -5,6 +5,30 @@
 #include <arpa/inet.h>
 #include <string.h>
 
+dev::ctf_packet::ctf_packet():
+    frame_start(4),
+    protocol(8192),
+    bdata_len(0),
+    frame_end(3)
+{
+    // 32  -htos--> 8192
+};
+
+uint32_t dev::ctf_packet::setup_packet(uint32_t len)
+{
+    bdata_len = ntohl(len);
+    data[len] = 3;
+    uint32_t rv = len + 8;
+    return rv;
+};
+
+std::ostream& dev::operator<<(std::ostream& os, const dev::ctf_packet& t)
+{
+    os << (int)t.frame_start << " " << t.protocol << " " << t.bdata_len << " " << t.frame_end;
+    return os;
+};
+
+
 void dev::run_tcp_server(const host_port& bind_hp, client_serve_fn serve_fn)
 {
     struct sockaddr_in address;
@@ -148,12 +172,6 @@ void dev::run_udp_server(const host_port& bind_hp, client_serve_fn serve_fn)
             std::cout << "running udp svr on [" << bind_hp.host << ", " << bind_hp.port << "]" << std::endl;
             serve_fn(skt_fd);
         }
-        /*
-        while(true)
-        {
-            std::cout << "udp svr.. " << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
-            }*/
     }
 };
 
@@ -169,19 +187,7 @@ void dev::run_udp_client(const host_port& cl_bind_hp, client_serve_fn client_fn)
             std::cout << "running udp client on [" << cl_bind_hp.host << ", " << cl_bind_hp.port << "]" << std::endl;
             client_fn(skt_fd);
         }        
-/*        while(true)
-        {
-            std::cout << "udp client.. " << std::endl;
-            std::this_thread::sleep_for(std::chrono::milliseconds(800));
-        }
-*/
     }
-    
-    /*
-    if(serve_fn)
-    {
-        serve_fn(skt_fd);
-        } */   
 };
 
 /**
@@ -233,6 +239,41 @@ bool dev::blocking_tcp_socket::readall(char *buf, size_t len)
     return true;
 };
 
+int dev::blocking_tcp_socket::read_packet(ctf_packet& pkt)
+{
+    if(!readall((char*)&pkt, 7))return -1;
+    
+    if(pkt.frame_start != ctf_frame_start)
+    {
+        std::cout << "invalid 'frame_start' received [" << (int)pkt.frame_start << "] expected [" << (int)ctf_frame_start << "]\n";
+        return 0;
+    }
+    auto protocol_h = ntohs(pkt.protocol);
+    if(protocol_h != ctf_protocol)
+    {
+        std::cout << "invalid 'protocol' received [" << protocol_h << " expected [" << ctf_protocol << "]\n";
+        return 0;
+    }
+    auto bdata_len_h = htonl(pkt.bdata_len);
+    if(bdata_len_h > CTF_MAX_PAYLOAD)
+    {
+        std::cout << "big data size received [" << bdata_len_h << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
+        bdata_len_h = CTF_MAX_PAYLOAD;
+    }
+    
+//    std::cout << "pkt:" << pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
+    if(!readall((char*)pkt.data, bdata_len_h))return -1;
+    if(!readall((char*)&pkt.frame_end, 1))return -1;
+    
+    if(pkt.frame_end != ctf_frame_end)
+    {
+        std::cout << "invalid 'frame_end' received [" << (int)pkt.frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
+        return 0;
+    }
+
+    return bdata_len_h;    
+};
+
 /**
    udp_socket
 */
@@ -244,6 +285,39 @@ void dev::udp_socket::init(int sk)
 void dev::udp_socket::setConn(const dev::HOST_PORT_ARR& arr)
 {
     m_conn_hp = arr;
+};
+
+int dev::udp_socket::read_packet(ctf_packet& pkt)
+{
+    if(!readall((char*)&pkt, sizeof(ctf_packet)))return -1;
+    
+    if(pkt.frame_start != ctf_frame_start)
+    {
+        std::cout << "invalid 'frame_start' received [" << (int)pkt.frame_start << "] expected [" << (int)ctf_frame_start << "]\n";
+        return 0;
+    }
+    auto protocol_h = ntohs(pkt.protocol);
+    if(protocol_h != ctf_protocol)
+    {
+        std::cout << "invalid 'protocol' received [" << protocol_h << " expected [" << ctf_protocol << "]\n";
+        return 0;
+    }
+    auto bdata_len_h = htonl(pkt.bdata_len);
+    if(bdata_len_h > CTF_MAX_PAYLOAD)
+    {
+        std::cout << "big data size received [" << bdata_len_h << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
+        bdata_len_h = CTF_MAX_PAYLOAD;
+    }
+    
+    //std::cout << "pkt:" << m_pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
+    
+    if(pkt.frame_end != ctf_frame_end)
+    {
+        std::cout << "invalid 'frame_end' received [" << (int)pkt.frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
+        return 0;
+    }
+
+    return bdata_len_h;
 };
 
 bool dev::udp_socket::readall(char *buf, size_t len)
@@ -269,8 +343,6 @@ bool dev::udp_socket::readall(char *buf, size_t len)
             perror("socket-read/closed");
             return false;
         }
-
-//        std::cout << "udp recv " << n << " from " << c.host << " " << c.port << "\n";
     }
     
     return true;
@@ -286,25 +358,14 @@ bool dev::udp_socket::sendall(char *buf, size_t len)
     {
         inet_pton(AF_INET, c.host.c_str(), &(address.sin_addr));
         address.sin_port = htons(c.port);
-
-//        size_t total = 0;
-//        int bytesleft = len;
-//        int n = 0;
-//        while(total < len)
-        {
-            int n = sendto(m_skt, buf, len, 
+        
+        int n = sendto(m_skt, buf, len, 
                        MSG_CONFIRM, (const struct sockaddr *) &address,  
                        sizeof(address));
-            if (n == -1) {
-                perror("udp-socket-send");
-                return false;
-            }
-
-            //std::cout << "udp sent " << n << " to " << c.host << " " << c.port << "\n";
-            
-//            total += n;
-//            bytesleft -= n;
-        }
+        if (n == -1) {
+            perror("udp-socket-send");
+            return false;
+        }        
     }
     
     return true;

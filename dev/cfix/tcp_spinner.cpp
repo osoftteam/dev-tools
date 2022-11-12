@@ -43,6 +43,7 @@ struct spin_state{
     dev::ctf_packet pkt;
 } prc;
 
+
 bool load_data_file(const std::string& name);
 void serve_client(int skt);
 void serve_udp_client(int skt);
@@ -136,9 +137,10 @@ bool read_full_config_file()
     }
 
     cfg.cfg_read_time = time(nullptr);
-    
+    std::cout << "finished reading cfg [" << cfg.cfg_file_path << "]\n";
     return true;
 }
+
 
 bool check_read_partial_config_file()
 {
@@ -376,6 +378,8 @@ void read_udp_client_packets(int skt)
 
 bool load_data_file(const std::string& name)
 {
+    std::cout << "loading [" << name << "]\n";
+    
     std::ifstream f(name, std::ifstream::binary);
     if(f)
     {       

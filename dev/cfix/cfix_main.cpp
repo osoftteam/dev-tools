@@ -13,6 +13,7 @@ bool print_all_data = false;
 bool use_tcp_protocol = true;
 bool collect_statistics = true;
 std::string selected_udp_client;
+size_t max_num_packets = 0;
 
 
 static void display_help(const char* n)
@@ -42,13 +43,13 @@ static void display_help(const char* n)
     std::cout << "    gfix-server -generate&send fix messages out of template using config 'tag' options\n";
     std::cout << "-p protocol '-p tcp' or '-p udp' (tcp by default)\n";
     std::cout << "-u <upd-client-name> \n";
+    std::cout << "-m max # of packets to process \n";
 }
+
 
 void SIGPIPE_handler(int ) {
     printf("Caught SIGPIPE\n");
 }
-
-
 
 int main(int argc, char* argv[])
 {    
@@ -58,7 +59,7 @@ int main(int argc, char* argv[])
     if(argc > 1)
     {
         int opt;
-        while ((opt = getopt(argc, argv, "hf:r:VFp:u:")) != -1) {
+        while ((opt = getopt(argc, argv, "hf:r:VFp:u:m:")) != -1) {
             switch(opt)
             {
             case 'h':
@@ -100,6 +101,10 @@ int main(int argc, char* argv[])
             {
                 std::cout << "cfg fast mode\n";
                 collect_statistics = false;
+            }break;
+            case 'm':
+            {
+                max_num_packets = dev::stoui(optarg);    
             }break;
             }
         }//while options
