@@ -8,6 +8,7 @@
 #include <optional>
 #include <string_view>
 #include <thread>
+#include <arpa/inet.h>
 
 namespace dev
 {

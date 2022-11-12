@@ -7,16 +7,18 @@
 #include <iomanip>
 #include "tcp_spinner.h"
 #include "tag-generator.h"
+#include "ctf-messenger.h"
 
 bool print_all_data = false;
 bool use_tcp_protocol = true;
 bool collect_statistics = true;
-std::string selected_upd_client;
+std::string selected_udp_client;
+
 
 static void display_help(const char* n)
 {
     std::cout << n << " -r <run-option>\n";
-    std::cout << n << " -f <cfg-file> read config file\n";
+    std::cout << n << " -f <cfg-file> read config file\n\n";
     std::cout << "Example: " << n << " -r ctf-server" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -r ctf-client" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -r fix-server" << " -f data/spin.properties\n";
@@ -24,6 +26,10 @@ static void display_help(const char* n)
     std::cout << "Example: " << n << " -r fix-client" << " -f data/spin.properties\n";
     std::cout << std::endl;
     std::cout << "Example(upd): " << n << " -p udp -r ctf-server" << " -f data/spin.properties\n";
+    std::cout << "Example(upd): " << n << " -p udp -r fix-server" << " -f data/spin.properties\n";
+    std::cout << "Example(upd): " << n << " -p udp -r gfix-server" << " -f data/spin.properties\n";        
+    std::cout << "Example(upd): " << n << " -p udp -u client0 -r ctf-client" << " -f data/spin.properties\n";
+    std::cout << "Example(upd): " << n << " -p udp -u client0 -r fix-client" << " -f data/spin.properties\n";    
     std::cout << std::endl;
     std::cout << "";
     std::cout << "-V - verbose, print data, busy screen\n";
@@ -34,7 +40,7 @@ static void display_help(const char* n)
     std::cout << "    fix-server - send fix messages wrapped in CTF-packets\n";
     std::cout << "    fix-client - consume(parse) fix messages in CTF-packets\n";
     std::cout << "    gfix-server -generate&send fix messages out of template using config 'tag' options\n";
-    std::cout << "-p protocol tcp or udp (tcp by default)\n";
+    std::cout << "-p protocol '-p tcp' or '-p udp' (tcp by default)\n";
     std::cout << "-u <upd-client-name> \n";
 }
 
@@ -42,8 +48,10 @@ void SIGPIPE_handler(int ) {
     printf("Caught SIGPIPE\n");
 }
 
+
+
 int main(int argc, char* argv[])
-{
+{    
     signal(SIGPIPE, SIGPIPE_handler);
     std::string cfg_file, runmode;
     
@@ -68,7 +76,7 @@ int main(int argc, char* argv[])
             }break;
             case 'u':
             {                
-                selected_upd_client = optarg;
+                selected_udp_client = optarg;
             }break;            
             case 'p':
             {

@@ -215,4 +215,12 @@ std::optional<dev::var_generator> dev::tag_generator_factory::produce_generator(
 
 
 
-
+bool dev::stat_tag_mapper::map_tag(size_t tag, const std::string_view& sv)
+{
+    auto i = m_stat.find(tag);
+    if(i != m_stat.end())
+    {
+        std::visit([&sv](auto&& st){st.update_stat(sv);}, i->second);
+    }            
+    return true;
+};

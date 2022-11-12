@@ -11,7 +11,7 @@
 #include "fix-utils.h"
 
 extern bool use_tcp_protocol;
-extern std::string selected_upd_client;
+extern std::string selected_udp_client;
 
 enum class erunmode
 {
@@ -26,8 +26,7 @@ enum class erunmode
 struct spin_cfg
 {
     erunmode             rmode{erunmode::none};
-    std::string          host;
-    size_t               port;
+    dev::host_port       hp;
     dev::HOST_PORT_ARR   client_host_ports;
     dev::host_port       udp_cl_hp;
     std::string          data_file;
@@ -39,16 +38,20 @@ struct spin_cfg
 } cfg;
 
 struct spin_state{
-    char* bdata         {0};
-    uint32_t bdata_len  {0};
-
+    uint32_t payload_len{0};
+    uint32_t wire_len   {0};
+    dev::ctf_packet pkt;
 } prc;
 
 bool load_data_file(const std::string& name);
 void serve_client(int skt);
+void serve_udp_client(int skt);
 void serve_client_with_fix_generator(int skt);
+void serve_udp_client_with_fix_generator(int skt);
 void read_client_packets(int skt);
 void read_client_fix_packets(int skt);
+void read_udp_client_packets(int skt);
+void read_udp_client_fix_packets(int skt);
 
 #define CHECK_CFG_FIELD(N, V)i = m.find(N);if(i == m.end()){std::cout << "ERROR. tcp_spinner expected [" << N << "]" << std::endl; return false;}else{V = i->second; std::cout << "cfg " << N " = " << i->second << "\n";}
 #define CHECK_OPT_CFG_FIELD(N, V)i = m.find(N);if(i != m.end()){V = i->second; std::cout << "cfg " << N " = " << i->second << "\n";}
@@ -77,9 +80,9 @@ bool read_full_config_file()
         std::string prop_val = "";
         auto i =  m.begin();
 
-        CHECK_CFG_FIELD("host", cfg.host);
+        CHECK_CFG_FIELD("host", cfg.hp.host);
         CHECK_CFG_FIELD("port", prop_val);
-        cfg.port = std::stoi(prop_val);
+        cfg.hp.port = std::stoi(prop_val);
         CHECK_OPT_CFG_FIELD("data-file", cfg.data_file);
         CHECK_OPT_CFG_FIELD("fix-template", cfg.fix_template);
         CHECK_CFG_FIELD("spin-sleep-msec", prop_val);
@@ -102,10 +105,10 @@ bool read_full_config_file()
             {
                 cfg.client_host_ports.push_back(hp);
                 std::cout << "cfg client" << j << "(h,p) = (" << hp.host << "," << hp.port << ")\n";
-                if(client_name == selected_upd_client)
+                if(client_name == selected_udp_client)
                 {
                     cfg.udp_cl_hp = hp;
-                    std::cout << "cfg selected udp client [" << selected_upd_client << "]";
+                    std::cout << "cfg selected udp client [" << selected_udp_client << "]";
                 }
             }
         }
@@ -220,45 +223,45 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
     case erunmode::fix_server:
     {
         if(use_tcp_protocol){
-            dev::run_tcp_server(cfg.host, cfg.port, serve_client);
+            dev::run_tcp_server(cfg.hp, serve_client);
         }
         else{
-            dev::run_udp_server(cfg.host, cfg.port, cfg.client_host_ports, serve_client);
+            dev::run_udp_server(cfg.hp, serve_udp_client);
         }
     }break;
     case erunmode::gfix_server:
     {
         if(use_tcp_protocol){
-            dev::run_tcp_server(cfg.host, cfg.port, serve_client_with_fix_generator);
+            dev::run_tcp_server(cfg.hp, serve_client_with_fix_generator);
         }
         else{
-            dev::run_udp_server(cfg.host, cfg.port, cfg.client_host_ports, serve_client_with_fix_generator);
+            dev::run_udp_server(cfg.hp, serve_udp_client_with_fix_generator);
         }
     }break;
     case erunmode::client:
     {
         if(use_tcp_protocol){
-            dev::run_tcp_client(cfg.host, cfg.port, read_client_packets);
+            dev::run_tcp_client(cfg.hp, read_client_packets);
         }
         else{
             if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
                 std::cout << "ERROR. UDP client bind host/port not defined";
                 return;
             }
-            dev::run_udp_client(cfg.host, cfg.port, cfg.udp_cl_hp, read_client_packets);
+            dev::run_udp_client(cfg.udp_cl_hp, read_udp_client_packets);
         }
     }break;
     case erunmode::fix_client:
     {
         if(use_tcp_protocol){
-            dev::run_tcp_client(cfg.host, cfg.port, read_client_fix_packets);
+            dev::run_tcp_client(cfg.hp, read_client_fix_packets);
         }
         else{
             if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
                 std::cout << "ERROR. UDP client bind host/port not defined";
                 return;
             }            
-            dev::run_udp_client(cfg.host, cfg.port, cfg.udp_cl_hp, read_client_fix_packets);
+            dev::run_udp_client(cfg.udp_cl_hp, read_udp_client_fix_packets);
         }
     }break;
     default:break;
@@ -272,19 +275,44 @@ void serve_client(int skt)
     
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.spin_packets(prc.bdata, prc.bdata_len);
+    m.spin_packets(prc.pkt, prc.wire_len);
 };
+
+
+void serve_udp_client(int skt)
+{
+    check_read_partial_config_file();
+    
+    dev::ctf_messenger<dev::udp_socket> m;
+    m.init(skt, cfg.spin_sleep_msec);
+    m.sk().setConn(cfg.client_host_ports);
+    m.spin_packets(prc.pkt, prc.wire_len);
+};
+
 
 void serve_client_with_fix_generator(int skt)
 {
     check_read_partial_config_file();
     
-    std::string_view s(prc.bdata, prc.bdata_len);
+    std::string_view s(prc.pkt.data, prc.payload_len);
     dev::fixmsg_view fv(s);
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
     m.generate_fix_packets(fv, cfg.tag_generators);
 };
+
+void serve_udp_client_with_fix_generator(int skt)
+{
+    check_read_partial_config_file();
+    
+    std::string_view s(prc.pkt.data, prc.payload_len);
+    dev::fixmsg_view fv(s);
+    dev::ctf_messenger<dev::udp_socket> m;
+    m.init(skt, cfg.spin_sleep_msec);
+    m.sk().setConn(cfg.client_host_ports);
+    m.generate_fix_packets(fv, cfg.tag_generators);
+};
+
 
 void read_client_packets(int skt)
 {
@@ -312,21 +340,58 @@ void read_client_fix_packets(int skt)
     m.receive_fix_messages(stat);
 };
 
+void read_udp_client_fix_packets(int skt)
+{
+    check_read_partial_config_file();
+    dev::HOST_PORT_ARR   host_ports;
+    host_ports.push_back(cfg.hp);
+
+    
+    dev::T2STAT stat;
+    for(const auto& i : cfg.tag_generators)
+    {
+        auto tag = i.first;
+        std::visit([&stat, &tag](auto&& g){auto v = g.make_tag_stat();stat[tag] = v;}, i.second);
+    }
+    
+    dev::ctf_messenger<dev::udp_socket> m;
+    m.init(skt, cfg.spin_sleep_msec);
+    m.sk().setConn(host_ports);
+    m.receive_fix_messages(stat);
+};
+
+
+void read_udp_client_packets(int skt)
+{
+    check_read_partial_config_file();
+
+    dev::HOST_PORT_ARR   host_ports;
+    host_ports.push_back(cfg.hp);
+    
+    dev::ctf_messenger<dev::udp_socket> m;
+    m.init(skt, cfg.spin_sleep_msec);
+    m.sk().setConn(host_ports);
+    m.receive_packets();
+};
+
 bool load_data_file(const std::string& name)
 {
     std::ifstream f(name, std::ifstream::binary);
     if(f)
-    {
-        if(prc.bdata)delete[] prc.bdata;
-        
+    {       
         f.seekg(0, f.end);
-        prc.bdata_len = static_cast<size_t>(f.tellg());
+        auto bdata_len = static_cast<size_t>(f.tellg());
         f.seekg(0, f.beg);
+        if(bdata_len > CTF_MAX_PAYLOAD){
+            std::cout << "ERROR. File too big [" << name << "] [" << bdata_len << "]\n";
+            return false;
+        }
 
-        prc.bdata = new char[prc.bdata_len];
-        f.read(prc.bdata, prc.bdata_len);
+        f.read(prc.pkt.data, bdata_len);
+        prc.payload_len = bdata_len;
+        prc.wire_len = prc.pkt.setup_packet(bdata_len);
         f.close();
-        std::cout << "loaded data file [" << prc.bdata_len << "] Bytes" << std::endl;
+        std::cout << "loaded data file [" << bdata_len << "] Bytes" << std::endl;
     }
     else
     {

@@ -78,6 +78,15 @@ namespace dev
         static std::optional<var_generator> produce_generator(const std::string_view& s);
     };
 
+    class stat_tag_mapper
+    {
+        dev::T2STAT& m_stat;
+    public:
+        stat_tag_mapper(dev::T2STAT& stat):m_stat(stat){}
+    
+        bool map_tag(size_t tag, const std::string_view& sv);
+    };
+    
 
     std::ostream& operator<<(std::ostream& os, const dev::set_tag_stat& t);
     std::ostream& operator<<(std::ostream& os, const dev::range_tag_stat& t);
