@@ -81,10 +81,18 @@ namespace dev
     class stat_tag_mapper
     {
         dev::T2STAT& m_stat;
+        size_t m_pkt_counter_tag;
+        size_t m_prev_pkt_num{0};
+        size_t m_lost_pkt_num{0};
+        size_t m_out_of_order_pkt_num{0};
+        std::unordered_set<size_t> m_missing_pkt;
     public:
-        stat_tag_mapper(dev::T2STAT& stat):m_stat(stat){}
+        stat_tag_mapper(dev::T2STAT& stat, size_t pkt_counter_tag)
+            :m_stat(stat), m_pkt_counter_tag(pkt_counter_tag){}
     
         bool map_tag(size_t tag, const std::string_view& sv);
+        size_t lost_pkt_num()const{return m_lost_pkt_num;}
+        size_t norder_num()const{return m_out_of_order_pkt_num;}
     };
     
 

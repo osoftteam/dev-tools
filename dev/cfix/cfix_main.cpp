@@ -15,21 +15,22 @@ bool collect_statistics = true;
 std::string selected_udp_client;
 size_t max_num_packets = 0;
 
-
 static void display_help(const char* n)
 {
     std::cout << n << " -r <run-option>\n";
     std::cout << n << " -f <cfg-file> read config file\n\n";
     std::cout << "Example: " << n << " -r ctf-server" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -r ctf-client" << " -f data/spin.properties\n";
+    std::cout << std::endl;        
     std::cout << "Example: " << n << " -r fix-server" << " -f data/spin.properties\n";
     std::cout << "Example: " << n << " -r gfix-server" << " -f data/spin.properties\n";    
     std::cout << "Example: " << n << " -r fix-client" << " -f data/spin.properties\n";
     std::cout << std::endl;
     std::cout << "Example(upd): " << n << " -p udp -r ctf-server" << " -f data/spin.properties\n";
+    std::cout << "Example(upd): " << n << " -p udp -u client0 -r ctf-client" << " -f data/spin.properties\n";
+    std::cout << std::endl;    
     std::cout << "Example(upd): " << n << " -p udp -r fix-server" << " -f data/spin.properties\n";
     std::cout << "Example(upd): " << n << " -p udp -r gfix-server" << " -f data/spin.properties\n";        
-    std::cout << "Example(upd): " << n << " -p udp -u client0 -r ctf-client" << " -f data/spin.properties\n";
     std::cout << "Example(upd): " << n << " -p udp -u client0 -r fix-client" << " -f data/spin.properties\n";    
     std::cout << std::endl;
     std::cout << "";
@@ -52,7 +53,16 @@ void SIGPIPE_handler(int ) {
 }
 
 int main(int argc, char* argv[])
-{    
+{
+/*    dev::datalen_t len = 480;
+    auto n = htons(len);
+    std::cout << n << " " << ntohs(n) << "\n";
+
+    return 0;
+*/  
+//    std::cout << sizeof(dev::ctf_packet) << "\n";
+//    return 0;
+    
     signal(SIGPIPE, SIGPIPE_handler);
     std::string cfg_file, runmode;
     

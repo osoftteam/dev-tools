@@ -7,24 +7,29 @@
 
 dev::ctf_packet::ctf_packet():
     frame_start(4),
-    protocol(8192),
-    bdata_len(0),
-    frame_end(3)
+    protocol(1),
+    bdata_len(0),    
+    seq(0)
 {
-    // 32  -htos--> 8192
 };
 
-uint32_t dev::ctf_packet::setup_packet(uint32_t len)
+dev::datalen_t dev::ctf_packet::setup_packet(datalen_t len)
 {
-    bdata_len = ntohl(len);
-    data[len] = 3;
-    uint32_t rv = len + 8;
+    bdata_len = htons(len);
+//    std::cout << "setup_packet of" << len << " " << bdata_len << std::endl;
+    data[len] = ctf_frame_end;
+    datalen_t rv = CTF_HEADER_SIZE + len + 1;
     return rv;
+};
+
+void dev::ctf_packet::setseq(seq_t s)const
+{
+    seq = htons(s);
 };
 
 std::ostream& dev::operator<<(std::ostream& os, const dev::ctf_packet& t)
 {
-    os << (int)t.frame_start << " " << t.protocol << " " << t.bdata_len << " " << t.frame_end;
+    os << (int)t.frame_start << " " << t.protocol << " " << t.bdata_len << " len=" << ntohs(t.bdata_len) << " seq=" << ntohs(t.seq);
     return os;
 };
 
@@ -62,7 +67,6 @@ void dev::run_tcp_server(const host_port& bind_hp, client_serve_fn serve_fn)
     while(true)
     {
         std::cout << "listen.. " << std::endl;
-        //    check_read_partial_config_file();
         if (listen(skt_fd, 3) < 0) {
             perror("listen");
             exit(EXIT_FAILURE);
@@ -191,11 +195,20 @@ void dev::run_udp_client(const host_port& cl_bind_hp, client_serve_fn client_fn)
 };
 
 /**
-   blocking_tcp_socket
+   ctf_socket
 */
-void dev::blocking_tcp_socket::init(int sk)
+void dev::ctf_socket::init(int sk)
 {
     m_skt = sk;
+};
+
+
+/**
+   blocking_tcp_socket
+*/
+bool dev::blocking_tcp_socket::send_packet(const ctf_packet& pkt, datalen_t wire_len)
+{
+    return sendall((char*)&pkt, wire_len);
 };
 
 bool dev::blocking_tcp_socket::sendall(char *buf, size_t len)
@@ -239,85 +252,92 @@ bool dev::blocking_tcp_socket::readall(char *buf, size_t len)
     return true;
 };
 
-int dev::blocking_tcp_socket::read_packet(ctf_packet& pkt)
+std::pair<int, int>  dev::blocking_tcp_socket::read_packet(ctf_packet& pkt)
 {
-    if(!readall((char*)&pkt, 7))return -1;
+    std::pair<int, int> rv = {0,0};
+    if(!readall((char*)&pkt, CTF_HEADER_SIZE))return {-1,-1};
+    //std::cout << "in:" << pkt << std::endl;
     
     if(pkt.frame_start != ctf_frame_start)
     {
         std::cout << "invalid 'frame_start' received [" << (int)pkt.frame_start << "] expected [" << (int)ctf_frame_start << "]\n";
-        return 0;
+        return {0,0};
     }
-    auto protocol_h = ntohs(pkt.protocol);
-    if(protocol_h != ctf_protocol)
+
+    if(pkt.protocol != ctf_protocol)
     {
-        std::cout << "invalid 'protocol' received [" << protocol_h << " expected [" << ctf_protocol << "]\n";
-        return 0;
+        std::cout << "invalid 'protocol' received [" << pkt.protocol << " expected [" << ctf_protocol << "]\n";
+        return {0,0};
     }
-    auto bdata_len_h = htonl(pkt.bdata_len);
-    if(bdata_len_h > CTF_MAX_PAYLOAD)
+    rv.first = ntohs(pkt.bdata_len);
+    if(rv.first > CTF_MAX_PAYLOAD)
     {
-        std::cout << "big data size received [" << bdata_len_h << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
-        bdata_len_h = CTF_MAX_PAYLOAD;
+        std::cout << "big data size received [" << rv.first
+                  << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
+        rv.first = CTF_MAX_PAYLOAD;
+        return {0,0};
     }
     
 //    std::cout << "pkt:" << pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
-    if(!readall((char*)pkt.data, bdata_len_h))return -1;
-    if(!readall((char*)&pkt.frame_end, 1))return -1;
+    if(!readall((char*)pkt.data, rv.first))return {-1,-1};
+    char frame_end;
+    if(!readall(&frame_end, 1))return {-1,-1};
     
-    if(pkt.frame_end != ctf_frame_end)
+    if(frame_end != ctf_frame_end)
     {
-        std::cout << "invalid 'frame_end' received [" << (int)pkt.frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
-        return 0;
+        std::cout << "invalid 'frame_end' received [" << (int)frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
+        return {0,0};
     }
 
-    return bdata_len_h;    
+    return rv;    
 };
 
 /**
    udp_socket
 */
-void dev::udp_socket::init(int sk)
-{
-    m_skt = sk;
-};
-
 void dev::udp_socket::setConn(const dev::HOST_PORT_ARR& arr)
 {
     m_conn_hp = arr;
 };
 
-int dev::udp_socket::read_packet(ctf_packet& pkt)
+bool dev::udp_socket::send_packet(const ctf_packet& pkt, datalen_t wire_len)
 {
-    if(!readall((char*)&pkt, sizeof(ctf_packet)))return -1;
+    return sendall((char*)&pkt, wire_len);
+};
+
+std::pair<int, int> dev::udp_socket::read_packet(ctf_packet& pkt)
+{
+    std::pair<int, int> rv = {0,0};
+    if(!readall((char*)&pkt, sizeof(ctf_packet)))return {-1, -1};
     
     if(pkt.frame_start != ctf_frame_start)
     {
         std::cout << "invalid 'frame_start' received [" << (int)pkt.frame_start << "] expected [" << (int)ctf_frame_start << "]\n";
-        return 0;
+        return {0,0};
     }
-    auto protocol_h = ntohs(pkt.protocol);
-    if(protocol_h != ctf_protocol)
+
+    if(pkt.protocol != ctf_protocol)
     {
-        std::cout << "invalid 'protocol' received [" << protocol_h << " expected [" << ctf_protocol << "]\n";
-        return 0;
+        std::cout << "invalid 'protocol' received [" << pkt.protocol << " expected [" << ctf_protocol << "]\n";
+        return {0,0};
     }
-    auto bdata_len_h = htonl(pkt.bdata_len);
-    if(bdata_len_h > CTF_MAX_PAYLOAD)
+    rv.first = ntohs(pkt.bdata_len);
+    if(rv.first > CTF_MAX_PAYLOAD)
     {
-        std::cout << "big data size received [" << bdata_len_h << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
-        bdata_len_h = CTF_MAX_PAYLOAD;
+        std::cout << "big data size received [" << rv.first << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
+        rv.first = CTF_MAX_PAYLOAD;
+        return {0,0};
     }
     
     //std::cout << "pkt:" << m_pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
-    
-    if(pkt.frame_end != ctf_frame_end)
+    char frame_end = pkt.data[rv.first];
+    if(frame_end != ctf_frame_end)
     {
-        std::cout << "invalid 'frame_end' received [" << (int)pkt.frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
-        return 0;
+        std::cout << "invalid 'frame_end' received [" << (int)frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
+        return {0,0};
     }
 
-    return bdata_len_h;
+    return rv;
 };
 
 bool dev::udp_socket::readall(char *buf, size_t len)
@@ -343,6 +363,10 @@ bool dev::udp_socket::readall(char *buf, size_t len)
             perror("socket-read/closed");
             return false;
         }
+
+        //if(n != 448){
+        //    std::cout << len << " " << n << "\n";
+        //}
     }
     
     return true;

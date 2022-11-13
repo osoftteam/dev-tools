@@ -221,6 +221,30 @@ bool dev::stat_tag_mapper::map_tag(size_t tag, const std::string_view& sv)
     if(i != m_stat.end())
     {
         std::visit([&sv](auto&& st){st.update_stat(sv);}, i->second);
-    }            
+    }
+    if(tag == m_pkt_counter_tag && tag != 0)
+    {
+        auto n = dev::stoui(sv);
+        if(n != 0)
+        {
+            if(n != m_prev_pkt_num + 1)
+            {
+                auto i = m_missing_pkt.find(n);
+                if(i != m_missing_pkt.end())
+                {
+                    ++m_out_of_order_pkt_num;
+                    m_missing_pkt.erase(n);
+                    --m_lost_pkt_num;
+                }
+                else
+                {
+                    m_missing_pkt.insert(n);
+                    ++m_lost_pkt_num;
+                }
+                
+            }
+            m_prev_pkt_num = n;
+        }
+    }
     return true;
 };

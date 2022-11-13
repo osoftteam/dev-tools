@@ -4,6 +4,7 @@
 #include "pfix.h"
 #include <unistd.h>
 #include <iomanip>
+#include "skt-utils.h"
 
 void display_verbose_tags_info()
 {
@@ -48,9 +49,8 @@ static void display_help(const char* n)
     std::cout << " env: COLORIZE_FIX_TAGS1=none  for 'no-color'\n";    
 }
 
-
 int main(int argc, char* argv[])
-{
+{    
     cfix::init_cfix();
     bool runtest = false;
     

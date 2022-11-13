@@ -2,28 +2,32 @@
 
 #include "dev-utils.h"
 
+#define CTF_HEADER_SIZE 8
 #define CTF_MAX_PAYLOAD 16000
-
-static constexpr char ctf_frame_start    {4};
-static constexpr char ctf_frame_end      {3};
-static constexpr uint16_t ctf_protocol   {32};
 
 namespace dev
 {
-    #pragma pack (1)
+    using datalen_t = uint16_t;
+    using seq_t = uint32_t;
+    static constexpr char ctf_frame_start    {4};
+    static constexpr char ctf_frame_end      {3};
+    static constexpr uint16_t ctf_protocol   {1};
+    
+//    #pragma pack (1)
     struct ctf_packet
     {
-        char     frame_start;    //1
-        uint16_t protocol;       //2
-        uint32_t bdata_len;      //4
-        char     data[CTF_MAX_PAYLOAD];
-        char     frame_end;      //1
+        char              frame_start;    //1
+        char              protocol;       //1
+        datalen_t         bdata_len;      //2
+        mutable seq_t     seq;            //4        
+        char              data[CTF_MAX_PAYLOAD];
 
         ctf_packet();
         ///return size of data to be sent over wire
-        uint32_t  setup_packet(uint32_t len);
+        datalen_t  setup_packet(datalen_t len);
+        void       setseq(seq_t s)const;
     };
-#pragma pack()
+//#pragma pack()
     
     using client_serve_fn = std::function<void(int)>;
     struct host_port
@@ -33,27 +37,32 @@ namespace dev
     };
     using HOST_PORT_ARR = std::vector<host_port>;
 
-    class blocking_tcp_socket
+    class ctf_socket
     {
     public:
         void init(int sk);
-        int  read_packet(ctf_packet&);
-        bool readall(char *buf, size_t len);
-        bool sendall(char *buf, size_t len);
-    private:
+    protected:
         int m_skt{-1};
     };
-
-    class udp_socket
+    
+    class blocking_tcp_socket: public ctf_socket
     {
     public:
-        void init(int sk);
+        bool send_packet(const ctf_packet& pkt, datalen_t wire_len);
+        std::pair<int, int>  read_packet(ctf_packet&);
+        bool readall(char *buf, size_t len);
+        bool sendall(char *buf, size_t len);
+    };
+
+    class udp_socket: public ctf_socket
+    {
+    public:
         void setConn(const dev::HOST_PORT_ARR& arr);
-        int  read_packet(ctf_packet&);
+        bool send_packet(const ctf_packet& pkt, datalen_t wire_len);
+        std::pair<int, int>  read_packet(ctf_packet&);
         bool readall(char *buf, size_t len);
         bool sendall(char *buf, size_t len);        
     protected:
-        int                  m_skt{-1};
         dev::HOST_PORT_ARR   m_conn_hp;        
     };
 

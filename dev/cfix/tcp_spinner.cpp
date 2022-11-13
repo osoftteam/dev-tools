@@ -35,14 +35,14 @@ struct spin_cfg
     std::string          cfg_file_path;
     time_t               cfg_read_time;
     dev::T2G             tag_generators;
+    size_t               pkt_counter_tag{0};
 } cfg;
 
 struct spin_state{
-    uint32_t payload_len{0};
-    uint32_t wire_len   {0};
+    dev::datalen_t payload_len{0};
+    dev::datalen_t wire_len   {0};
     dev::ctf_packet pkt;
 } prc;
-
 
 bool load_data_file(const std::string& name);
 void serve_client(int skt);
@@ -69,6 +69,10 @@ bool read_full_config_file()
             auto j = dev::tag_generator_factory::produce_generator(i.second);
             if(j){
                 cfg.tag_generators.emplace(i.first, std::move(j.value()));
+            }
+            else if(i.second == "counter")
+            {
+                cfg.pkt_counter_tag = i.first;
             }
         }
 
@@ -300,7 +304,7 @@ void serve_client_with_fix_generator(int skt)
     dev::fixmsg_view fv(s);
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.generate_fix_packets(fv, cfg.tag_generators);
+    m.generate_fix_packets(fv, cfg.tag_generators, cfg.pkt_counter_tag);
 };
 
 void serve_udp_client_with_fix_generator(int skt)
@@ -312,7 +316,7 @@ void serve_udp_client_with_fix_generator(int skt)
     dev::ctf_messenger<dev::udp_socket> m;
     m.init(skt, cfg.spin_sleep_msec);
     m.sk().setConn(cfg.client_host_ports);
-    m.generate_fix_packets(fv, cfg.tag_generators);
+    m.generate_fix_packets(fv, cfg.tag_generators, cfg.pkt_counter_tag);
 };
 
 
@@ -339,7 +343,7 @@ void read_client_fix_packets(int skt)
     
     dev::ctf_messenger m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.receive_fix_messages(stat);
+    m.receive_fix_messages(stat, cfg.pkt_counter_tag);
 };
 
 void read_udp_client_fix_packets(int skt)
@@ -359,7 +363,7 @@ void read_udp_client_fix_packets(int skt)
     dev::ctf_messenger<dev::udp_socket> m;
     m.init(skt, cfg.spin_sleep_msec);
     m.sk().setConn(host_ports);
-    m.receive_fix_messages(stat);
+    m.receive_fix_messages(stat, cfg.pkt_counter_tag);
 };
 
 

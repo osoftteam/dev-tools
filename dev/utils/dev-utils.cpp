@@ -112,7 +112,7 @@ std::string dev::size_human(uint64_t bytes, bool bytes_units)
 {
     static constexpr char len = 5;
 	static constexpr char suffix_bytes[len][3] = {"B", "KB", "MB", "GB", "TB"};
-    static constexpr char suffix[len][3] = {"B", "K", "M", "G", "T"};
+    static constexpr char suffix[len][3] = {"", "K", "M", "G", "T"};
 
 	int i = 0;
 	double dblBytes = bytes;
