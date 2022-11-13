@@ -222,7 +222,7 @@ bool dev::stat_tag_mapper::map_tag(size_t tag, const std::string_view& sv)
     {
         std::visit([&sv](auto&& st){st.update_stat(sv);}, i->second);
     }
-    if(tag == m_pkt_counter_tag && tag != 0)
+/*    if(tag == m_pkt_counter_tag && tag != 0)
     {
         auto n = dev::stoui(sv);
         if(n != 0)
@@ -245,6 +245,6 @@ bool dev::stat_tag_mapper::map_tag(size_t tag, const std::string_view& sv)
             }
             m_prev_pkt_num = n;
         }
-    }
+        }*/
     return true;
 };

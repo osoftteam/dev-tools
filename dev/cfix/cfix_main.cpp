@@ -9,11 +9,16 @@
 #include "tag-generator.h"
 #include "ctf-messenger.h"
 
-bool print_all_data = false;
+namespace dev
+{
+    bool print_all_data = false;
+    bool parse_fix = true;
+    bool collect_statistics = true;
+};
+
 bool use_tcp_protocol = true;
-bool collect_statistics = true;
 std::string selected_udp_client;
-size_t max_num_packets = 0;
+
 
 static void display_help(const char* n)
 {
@@ -35,7 +40,7 @@ static void display_help(const char* n)
     std::cout << std::endl;
     std::cout << "";
     std::cout << "-V - verbose, print data, busy screen\n";
-    std::cout << "-F - fast run, skip collecting statistics\n";
+//    std::cout << "-F - fast run, skip collecting statistics\n";
     std::cout << "-r run as..\n";
     std::cout << "    ctf-server - send data wrapped in CTF-packets\n";
     std::cout << "    ctf-client - consume CTF-packets\n";
@@ -44,7 +49,10 @@ static void display_help(const char* n)
     std::cout << "    gfix-server -generate&send fix messages out of template using config 'tag' options\n";
     std::cout << "-p protocol '-p tcp' or '-p udp' (tcp by default)\n";
     std::cout << "-u <upd-client-name> \n";
-    std::cout << "-m max # of packets to process \n";
+    std::cout << "-m mode \n";
+    std::cout << "    1(default) parse fix - ON, collect statistics - ON\n";
+    std::cout << "    2 parse fix - ON, statistics - OFF\n";
+    std::cout << "    3 parse fix - OF, statistics - OFF\n";
 }
 
 
@@ -105,16 +113,29 @@ int main(int argc, char* argv[])
             case 'V':
             {
                 std::cout << "cfg verbose mode\n";
-                print_all_data = true;
+                dev::print_all_data = true;
             }break;
             case 'F':
             {
                 std::cout << "cfg fast mode\n";
-                collect_statistics = false;
+                dev::collect_statistics = false;
             }break;
             case 'm':
             {
-                max_num_packets = dev::stoui(optarg);    
+                auto v = dev::stoui(optarg);
+                switch(v)
+                {
+                case 2:
+                {
+                    dev::parse_fix = true;
+                    dev::collect_statistics = false;
+                }break;
+                case 3:
+                {
+                    dev::parse_fix = false;
+                    dev::collect_statistics = false;
+                }break;
+                }
             }break;
             }
         }//while options
