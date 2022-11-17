@@ -16,7 +16,7 @@ namespace dev
     bool collect_statistics = true;
 };
 
-bool use_tcp_protocol = true;
+dev::skt_protocol use_protocol;
 std::string selected_udp_client;
 
 
@@ -24,30 +24,33 @@ static void display_help(const char* n)
 {
     std::cout << n << " -r <run-option>\n";
     std::cout << n << " -f <cfg-file> read config file\n\n";
-    std::cout << "Example: " << n << " -r ctf-server" << " -f data/spin.properties\n";
-    std::cout << "Example: " << n << " -r ctf-client" << " -f data/spin.properties\n";
-    std::cout << std::endl;        
-    std::cout << "Example: " << n << " -r fix-server" << " -f data/spin.properties\n";
-    std::cout << "Example: " << n << " -r gfix-server" << " -f data/spin.properties\n";    
-    std::cout << "Example: " << n << " -r fix-client" << " -f data/spin.properties\n";
+    std::cout << "Example(tcp): " << n << " -r ctf-server" << " -f data/spin.properties\n";
+    std::cout << "Example(tcp): " << n << " -r ctf-client" << " -f data/spin.properties\n";
+    std::cout << "Example(tcp): " << n << " -r fix-server" << " -f data/spin.properties\n";
+    std::cout << "Example(tcp): " << n << " -r gfix-server" << " -f data/spin.properties\n";
+    std::cout << "Example(tcp): " << n << " -r fix-client" << " -f data/spin.properties\n";
     std::cout << std::endl;
     std::cout << "Example(upd): " << n << " -p udp -r ctf-server" << " -f data/spin.properties\n";
     std::cout << "Example(upd): " << n << " -p udp -u client0 -r ctf-client" << " -f data/spin.properties\n";
-    std::cout << std::endl;    
     std::cout << "Example(upd): " << n << " -p udp -r fix-server" << " -f data/spin.properties\n";
     std::cout << "Example(upd): " << n << " -p udp -r gfix-server" << " -f data/spin.properties\n";        
-    std::cout << "Example(upd): " << n << " -p udp -u client0 -r fix-client" << " -f data/spin.properties\n";    
+    std::cout << "Example(upd): " << n << " -p udp -u client0 -r fix-client" << " -f data/spin.properties\n";
+    std::cout << std::endl;
+    std::cout << "Example(unix): " << n << " -p unix -r ctf-server" << " -f data/spin.properties\n";
+    std::cout << "Example(unix): " << n << " -p unix -r ctf-client" << " -f data/spin.properties\n";
+    std::cout << "Example(unix): " << n << " -p unix -r fix-server" << " -f data/spin.properties\n";
+    std::cout << "Example(unix): " << n << " -p unix -r gfix-server" << " -f data/spin.properties\n";    
+    std::cout << "Example(unix): " << n << " -p unix -r fix-client" << " -f data/spin.properties\n";
     std::cout << std::endl;
     std::cout << "";
     std::cout << "-V - verbose, print data, busy screen\n";
-//    std::cout << "-F - fast run, skip collecting statistics\n";
     std::cout << "-r run as..\n";
     std::cout << "    ctf-server - send data wrapped in CTF-packets\n";
     std::cout << "    ctf-client - consume CTF-packets\n";
     std::cout << "    fix-server - send fix messages wrapped in CTF-packets\n";
     std::cout << "    fix-client - consume(parse) fix messages in CTF-packets\n";
     std::cout << "    gfix-server -generate&send fix messages out of template using config 'tag' options\n";
-    std::cout << "-p protocol '-p tcp' or '-p udp' (tcp by default)\n";
+    std::cout << "-p protocol '-p tcp' or '-p udp' '-p unix' (tcp by default)\n";
     std::cout << "-u <upd-client-name> \n";
     std::cout << "-m mode \n";
     std::cout << "    1(default) parse fix - ON, collect statistics - ON\n";
@@ -100,11 +103,14 @@ int main(int argc, char* argv[])
             case 'p':
             {
                 if(strcmp(optarg, "tcp") == 0){
-                    use_tcp_protocol = true; 
+                    use_protocol = dev::skt_protocol::tcp;
                 }
                 else if(strcmp(optarg, "udp") == 0){
-                    use_tcp_protocol = false; 
+                    use_protocol = dev::skt_protocol::udp;
                 }
+                else if(strcmp(optarg, "unix") == 0){
+                    use_protocol = dev::skt_protocol::unix;
+                }                
                 else{
                     std::cout << "ERROR. Invalid protocol option provided [" << optarg << "]\n";
                     return 0;

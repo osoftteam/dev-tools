@@ -9,6 +9,10 @@
 #include <string_view>
 #include <thread>
 #include <arpa/inet.h>
+#include <functional>
+#include <sstream>
+#include <string.h>
+#include <sys/un.h>
 
 namespace dev
 {
@@ -31,9 +35,6 @@ namespace dev
     
     template<class IT>
     void print_pairs(IT b, IT e, const std::string sep = " ");
-
-    bool sendall(int s, char *buf, size_t len);
-    bool readall(int s, char *buf, size_t len);
 };
 
 

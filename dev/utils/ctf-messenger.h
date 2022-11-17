@@ -18,12 +18,10 @@ extern bool print_all_data;
         void spin_packets(const ctf_packet& pkt, datalen_t wire_len);
         void generate_fix_packets(const dev::fixmsg_view<no_tag_mapper>& fv, const dev::T2G& generators);
         void receive_packets();
-        void receive_fix_messages(T2STAT& stat);
         SK&  sk(){return m_sk;}
     private:
         SK         m_sk;
         size_t     m_spin_sleep_time_ms{0};
-        ctf_packet m_pkt;
     };
 };
 
@@ -39,118 +37,17 @@ bool dev::ctf_messenger<SK>::init(int skt, size_t sleep_time)
 template<class SK>
 void dev::ctf_messenger<SK>::receive_packets()
 {
-    std::cout << "receiving packets.. \n";
-    auto session_start = time(nullptr);
-    size_t pnum = 0;
-    size_t total_received = 0;
-    size_t print_time = 0;
-    size_t prev_pkt_num = 0;
-    size_t lost_pkt_num = 0;
-    
+    std::cout << "receiving packets.. \n";  
+    m_sk.start_session();
     while(1)
     {        
-        auto r = m_sk.read_packet(m_pkt);
-        if(r.first < 0)return;
-        if(r.first == 0)continue;
-        total_received += r.first;
-        ++pnum;
+        auto r = m_sk.read_packet();
+        if(r.len < 0)return;
+        if(r.len == 0)continue;
 
-        if(r.second != 0)
-        {
-            if(r.second != (int)prev_pkt_num + 1)
-            {
-                ++lost_pkt_num;
-            }
-        }
         
         if(print_all_data){
-            m_pkt.data[r.first] = 0;
-            std::cout << m_pkt.data << std::endl;
-        }
-        
-        auto now = time(nullptr);
-        auto time_delta = now - session_start;
-        if(print_time != (size_t)time_delta && time_delta%2 == 0)
-        {
-            print_time = (size_t)time_delta;
-            auto bpsec = int(total_received / time_delta);
-            std::cout << "#" << pnum << " ";
-            if(lost_pkt_num > 0){
-                std::cout << " lost=" << lost_pkt_num << " ";
-            }
-            std::cout << dev::size_human(total_received) << " "
-                      << dev::size_human(bpsec) << "/sec" << std::endl;
-        }
-    }
-};
-
-template<class SK>
-void dev::ctf_messenger<SK>::receive_fix_messages(T2STAT& stat)
-{
-    std::cout << "receiving fix messages.. statistics - "
-              << (collect_statistics ? "ON" : "OFF")
-              << " parse fix - "<< (parse_fix ? "ON" : "OFF")
-              << "\n";
-    auto session_start = time(nullptr);
-    size_t pnum = 0;
-    size_t total_received = 0;
-    size_t print_time = 0;
-    size_t prev_pkt_num = 0;
-    size_t lost_pkt_num = 0;
-    
-
-    stat_tag_mapper tm(stat);
-    auto tm_ptr = collect_statistics ? &tm : nullptr;
-    
-    while(1)
-    {
-        auto r = m_sk.read_packet(m_pkt);;
-        if(r.first < 0)return;
-        if(r.first == 0)continue;
-        std::string_view s(m_pkt.data, r.first);
-        if(parse_fix){
-            dev::fixmsg_view f(s, tm_ptr);
-        }
-
-        if(r.second != 0)
-        {
-            if(r.second != (int)prev_pkt_num + 1)
-            {
-                ++lost_pkt_num;
-            }
-        }
-        
-        if(print_all_data){
-            std::cout << s << std::endl;
-        }
-        
-        total_received += r.first;
-        ++pnum;
-        
-        auto now = time(nullptr);
-        auto time_delta = now - session_start;
-        if(print_time != (size_t)time_delta && time_delta%2 == 0)
-        {
-            print_time = (size_t)time_delta;
-            auto bpsec = int(total_received / time_delta);
-            auto ppsec = int(pnum / time_delta);
-            std::cout << "#" << pnum << " ";
-            if(lost_pkt_num > 0){
-                std::cout << " lost=" << lost_pkt_num << " ";
-            }            
-            std::cout << dev::size_human(ppsec, false) << "msg/sec " << " "
-                      << dev::size_human(bpsec) << "/sec ";
-
-            if(collect_statistics)
-            {
-                for(const auto& i : stat)
-                {
-                    std::cout << i.first << "=";
-                    std::visit([](auto&& st){std::cout << st;}, i.second);
-                    std::cout << "  ";
-                }
-            }           
-            std::cout << std::endl;
+            std::cout << m_sk.pkt().data << std::endl;
         }
     }
 };
@@ -192,8 +89,7 @@ void dev::ctf_messenger<SK>::generate_fix_packets(const dev::fixmsg_view<no_tag_
 {
     std::cout << "starting fix-generator on template[" << fv.strv() << "]\n";
 
-    //   std::string str_counter = std::to_string(pkt_counter_tag);
-    // str_counter+= "=";
+    ctf_packet m_pkt;
     
     std::string fix_str;
     fix_str.reserve(512);
@@ -206,8 +102,7 @@ void dev::ctf_messenger<SK>::generate_fix_packets(const dev::fixmsg_view<no_tag_
     for(const auto& j : generators)
     {
         std::visit([](auto&& g){g.init();}, j.second);
-    }
-    
+    }    
 
     while(1)
     {
@@ -231,13 +126,6 @@ void dev::ctf_messenger<SK>::generate_fix_packets(const dev::fixmsg_view<no_tag_
 
             fix_str.append("|");
         }
-
-        /*if(pkt_counter_tag != 0)
-        {
-            fix_str.append(str_counter);
-            fix_str.append(std::to_string(pnum));
-            fix_str.append("|");
-            }*/
 
         /// send packet ///
         datalen_t bdata_len = fix_str.size();

@@ -10,7 +10,7 @@
 #include "tag-generator.h"
 #include "fix-utils.h"
 
-extern bool use_tcp_protocol;
+extern dev::skt_protocol use_protocol;
 extern std::string selected_udp_client;
 
 enum class erunmode
@@ -35,7 +35,7 @@ struct spin_cfg
     std::string          cfg_file_path;
     time_t               cfg_read_time;
     dev::T2G             tag_generators;
-//    size_t               pkt_counter_tag{0};
+    std::string          unix_skt_file_path;
 } cfg;
 
 struct spin_state{
@@ -44,15 +44,62 @@ struct spin_state{
     dev::ctf_packet pkt;
 } prc;
 
+bool check_read_partial_config_file();
+
+template<class SKT>
+class packets_receiver
+{
+public:
+    void operator()(int skt)
+        {
+            check_read_partial_config_file();
+
+            dev::HOST_PORT_ARR   host_ports;
+            host_ports.push_back(cfg.hp);
+    
+            dev::ctf_messenger<SKT> m;
+            m.init(skt, cfg.spin_sleep_msec);
+            m.sk().set_mcast_conn(host_ports);
+            m.receive_packets();
+        };
+};
+
+template<class SKT>
+class packets_receiver_with_fix_parser
+{
+public:
+    void operator()(int skt)
+        {
+            check_read_partial_config_file();
+            dev::HOST_PORT_ARR   host_ports;
+            host_ports.push_back(cfg.hp);
+
+            dev::T2STAT stat;
+            for(const auto& i : cfg.tag_generators)
+            {
+                auto tag = i.first;
+                std::visit([&stat, &tag](auto&& g){auto v = g.make_tag_stat();stat[tag] = v;}, i.second);
+            }
+
+            dev::stat_tag_mapper tm(stat);
+            auto tm_ptr = dev::collect_statistics ? &tm : nullptr;   
+            
+            dev::ctf_messenger<SKT> m;
+            m.init(skt, cfg.spin_sleep_msec);
+            m.sk().set_mcast_conn(host_ports);
+            m.sk().set_parse_fix_tags(dev::parse_fix);
+            m.sk().set_fix_stat_tag_mapper(tm_ptr);
+            m.receive_packets();
+        };
+};
+
+
+
 bool load_data_file(const std::string& name);
 void serve_client(int skt);
 void serve_udp_client(int skt);
 void serve_client_with_fix_generator(int skt);
 void serve_udp_client_with_fix_generator(int skt);
-void read_client_packets(int skt);
-void read_client_fix_packets(int skt);
-void read_udp_client_packets(int skt);
-void read_udp_client_fix_packets(int skt);
 
 #define CHECK_CFG_FIELD(N, V)i = m.find(N);if(i == m.end()){std::cout << "ERROR. tcp_spinner expected [" << N << "]" << std::endl; return false;}else{V = i->second; std::cout << "cfg " << N " = " << i->second << "\n";}
 #define CHECK_OPT_CFG_FIELD(N, V)i = m.find(N);if(i != m.end()){V = i->second; std::cout << "cfg " << N " = " << i->second << "\n";}
@@ -70,10 +117,6 @@ bool read_full_config_file()
             if(j){
                 cfg.tag_generators.emplace(i.first, std::move(j.value()));
             }
-            /*else if(i.second == "counter")
-            {
-                cfg.pkt_counter_tag = i.first;
-                }*/
         }
 
         for(const auto& i : cfg.tag_generators)
@@ -92,7 +135,8 @@ bool read_full_config_file()
         CHECK_OPT_CFG_FIELD("fix-template", cfg.fix_template);
         CHECK_CFG_FIELD("spin-sleep-msec", prop_val);
         cfg.spin_sleep_msec = dev::stoui(prop_val);
-
+        CHECK_CFG_FIELD("unix-skt-file-path", cfg.unix_skt_file_path);
+        
         for(int j = 0; j < 10; ++j){
             std::string client_name = std::string("client") + std::to_string(j);
             std::string prefix = client_name + ".";
@@ -118,6 +162,14 @@ bool read_full_config_file()
             }
         }
 
+        if(use_protocol == dev::skt_protocol::unix)
+        {
+            if(cfg.unix_skt_file_path.empty())
+            {
+                std::cout << "ERROR. expected unix-skt-file-path in [" << cfg.data_file << "]\n";
+                return false;
+            }
+        }
         
         if(cfg.rmode == erunmode::server){
             if(!load_data_file(cfg.data_file))
@@ -132,7 +184,9 @@ bool read_full_config_file()
             {
                 std::cout << "ERROR loading data file [" << cfg.fix_template << "]\n";
                 return false;
-            }            
+            }
+            std::cout << "loaded fix file [" << cfg.fix_template << "]";
+    
         }
     }
     else
@@ -141,7 +195,17 @@ bool read_full_config_file()
     }
 
     cfg.cfg_read_time = time(nullptr);
+
+    if(cfg.rmode == erunmode::fix_client)
+    {
+        std::cout << " parse fix - "<< (dev::parse_fix ? "ON" : "OFF")
+                  << " fix statistics - " << (dev::collect_statistics ? "ON" : "OFF")
+                  << "\n";
+    }
+    
     std::cout << "finished reading cfg [" << cfg.cfg_file_path << "]\n";
+    
+    
     return true;
 }
 
@@ -228,46 +292,102 @@ void dev::start_tcp_spinner(const std::string& _runmode, const std::string& cfg_
     case erunmode::server:
     case erunmode::fix_server:
     {
-        if(use_tcp_protocol){
+        switch(use_protocol)
+        {
+        case dev::skt_protocol::tcp:
+        {
             dev::run_tcp_server(cfg.hp, serve_client);
-        }
-        else{
+        }break;
+        case dev::skt_protocol::udp:
+        {
             dev::run_udp_server(cfg.hp, serve_udp_client);
+        }break;
+        case dev::skt_protocol::unix:
+        {
+            dev::host_port hp;
+            hp.host = cfg.unix_skt_file_path;
+            dev::run_unix_socket_server(hp, serve_client);
+        }break;
+        default:break;
         }
     }break;
     case erunmode::gfix_server:
     {
-        if(use_tcp_protocol){
+        switch(use_protocol)
+        {
+        case dev::skt_protocol::tcp:
+        {
             dev::run_tcp_server(cfg.hp, serve_client_with_fix_generator);
-        }
-        else{
+        }break;
+        case dev::skt_protocol::udp:
+        {
             dev::run_udp_server(cfg.hp, serve_udp_client_with_fix_generator);
+        }break;
+        case dev::skt_protocol::unix:
+        {
+            dev::host_port hp;
+            hp.host = cfg.unix_skt_file_path;
+            dev::run_unix_socket_server(hp, serve_client_with_fix_generator);
+        }break;
+        default:break;
         }
+        
     }break;
     case erunmode::client:
     {
-        if(use_tcp_protocol){
-            dev::run_tcp_client(cfg.hp, read_client_packets);
-        }
-        else{
+        switch(use_protocol)
+        {
+        case dev::skt_protocol::tcp:
+        {
+            packets_receiver<dev::blocking_tcp_socket> p;
+            dev::run_tcp_client(cfg.hp, p);            
+        }break;
+        case dev::skt_protocol::udp:
+        {
             if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
                 std::cout << "ERROR. UDP client bind host/port not defined";
                 return;
             }
-            dev::run_udp_client(cfg.udp_cl_hp, read_udp_client_packets);
+            packets_receiver<dev::udp_socket> p;
+            dev::run_udp_client(cfg.udp_cl_hp, p);
+        }break;
+        case dev::skt_protocol::unix:
+        {
+            dev::host_port hp;
+            hp.host = cfg.unix_skt_file_path;
+            packets_receiver<dev::blocking_tcp_socket> p;
+            dev::run_unix_client(hp, p);
+        }break;
+        default:break;
         }
+
     }break;
     case erunmode::fix_client:
     {
-        if(use_tcp_protocol){
-            dev::run_tcp_client(cfg.hp, read_client_fix_packets);
-        }
-        else{
+        switch(use_protocol)
+        {
+        case dev::skt_protocol::tcp:
+        {
+            packets_receiver_with_fix_parser<dev::blocking_tcp_socket> p;
+            dev::run_tcp_client(cfg.hp, p);
+        }break;
+        case dev::skt_protocol::udp:
+        {
             if(cfg.udp_cl_hp.host.empty() || cfg.udp_cl_hp.port == 0){
                 std::cout << "ERROR. UDP client bind host/port not defined";
                 return;
-            }            
-            dev::run_udp_client(cfg.udp_cl_hp, read_udp_client_fix_packets);
+            }
+            packets_receiver_with_fix_parser<dev::udp_socket> p;
+            dev::run_udp_client(cfg.udp_cl_hp, p);            
+        }break;
+        case dev::skt_protocol::unix:
+        {
+            dev::host_port hp;
+            hp.host = cfg.unix_skt_file_path;            
+            packets_receiver_with_fix_parser<dev::blocking_tcp_socket> p;
+            dev::run_unix_client(hp, p);
+        }break;        
+        default:break;
         }
     }break;
     default:break;
@@ -291,7 +411,7 @@ void serve_udp_client(int skt)
     
     dev::ctf_messenger<dev::udp_socket> m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.sk().setConn(cfg.client_host_ports);
+    m.sk().set_mcast_conn(cfg.client_host_ports);
     m.spin_packets(prc.pkt, prc.wire_len);
 };
 
@@ -315,69 +435,8 @@ void serve_udp_client_with_fix_generator(int skt)
     dev::fixmsg_view fv(s);
     dev::ctf_messenger<dev::udp_socket> m;
     m.init(skt, cfg.spin_sleep_msec);
-    m.sk().setConn(cfg.client_host_ports);
-    m.generate_fix_packets(fv, cfg.tag_generators/*, cfg.pkt_counter_tag*/);
-};
-
-
-void read_client_packets(int skt)
-{
-    check_read_partial_config_file();
-    
-    dev::ctf_messenger m;
-    m.init(skt, cfg.spin_sleep_msec);
-    m.receive_packets();
-}
-
-
-void read_client_fix_packets(int skt)
-{
-    check_read_partial_config_file();
-
-    dev::T2STAT stat;
-    for(const auto& i : cfg.tag_generators)
-    {
-        auto tag = i.first;
-        std::visit([&stat, &tag](auto&& g){auto v = g.make_tag_stat();stat[tag] = v;}, i.second);
-    }
-    
-    dev::ctf_messenger m;
-    m.init(skt, cfg.spin_sleep_msec);
-    m.receive_fix_messages(stat/*, cfg.pkt_counter_tag*/);
-};
-
-void read_udp_client_fix_packets(int skt)
-{
-    check_read_partial_config_file();
-    dev::HOST_PORT_ARR   host_ports;
-    host_ports.push_back(cfg.hp);
-
-    
-    dev::T2STAT stat;
-    for(const auto& i : cfg.tag_generators)
-    {
-        auto tag = i.first;
-        std::visit([&stat, &tag](auto&& g){auto v = g.make_tag_stat();stat[tag] = v;}, i.second);
-    }
-    
-    dev::ctf_messenger<dev::udp_socket> m;
-    m.init(skt, cfg.spin_sleep_msec);
-    m.sk().setConn(host_ports);
-    m.receive_fix_messages(stat/*, cfg.pkt_counter_tag*/);
-};
-
-
-void read_udp_client_packets(int skt)
-{
-    check_read_partial_config_file();
-
-    dev::HOST_PORT_ARR   host_ports;
-    host_ports.push_back(cfg.hp);
-    
-    dev::ctf_messenger<dev::udp_socket> m;
-    m.init(skt, cfg.spin_sleep_msec);
-    m.sk().setConn(host_ports);
-    m.receive_packets();
+    m.sk().set_mcast_conn(cfg.client_host_ports);
+    m.generate_fix_packets(fv, cfg.tag_generators);
 };
 
 bool load_data_file(const std::string& name)

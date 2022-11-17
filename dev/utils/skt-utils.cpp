@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <string.h>
 
 dev::ctf_packet::ctf_packet():
     frame_start(4),
@@ -90,49 +89,56 @@ void dev::run_tcp_server(const host_port& bind_hp, client_serve_fn serve_fn)
     }
 };
 
-void dev::run_tcp_client(const host_port& conn_hp, client_serve_fn serve_fn)
+void dev::run_unix_socket_server(const host_port& bind_hp, client_serve_fn serve_fn)
 {
-    struct sockaddr_in address;
-    int addrlen = sizeof(address);
-    auto skt_fd = socket(AF_INET, SOCK_STREAM, 0);
+    std::cout << "running unix socket server [" << bind_hp.host << "]\n";
+    
+    struct sockaddr_un address, remote;
+    auto skt_fd = socket(AF_UNIX, SOCK_STREAM, 0);
     
     if (skt_fd < 0) {
-        perror("client/socket failed");
-        exit(EXIT_FAILURE);
-    }
-
-    int opt = 1;
-    if (setsockopt(skt_fd, SOL_SOCKET,
-                   SO_REUSEADDR | SO_REUSEPORT, &opt,
-                   sizeof(opt)))
-    {
-        perror("setsockopt");
+        perror("server/unix socket failed");
         exit(EXIT_FAILURE);
     }
 
 
     memset(&address, 0 , sizeof(address));
-    address.sin_family = AF_INET;
-    inet_pton(AF_INET, conn_hp.host.c_str(), &(address.sin_addr));
-    address.sin_port = htons(conn_hp.port);
-
-    if (connect(skt_fd, (struct sockaddr *)&address, addrlen) < 0)
-    {
-        perror("connect");
-        return;
+    address.sun_family = AF_UNIX;
+    strcpy(address.sun_path, bind_hp.host.c_str() );
+	unlink(address.sun_path);
+    auto len = strlen(address.sun_path) + sizeof(address.sun_family);
+    if (bind(skt_fd, (struct sockaddr*)&address, len) < 0) {
+        perror("bind failed");
+        exit(EXIT_FAILURE);
     }
-
-    static char client_ip[64] = "";
-    inet_ntop(AF_INET, &(address.sin_addr), client_ip, INET_ADDRSTRLEN);
-    std::cout << "connected [" << client_ip << "]" << std::endl;
-
-    if(serve_fn)
+    while(true)
     {
-        serve_fn(skt_fd);
+        std::cout << "listen.. " << std::endl;
+        if (listen(skt_fd, 3) < 0) {
+            perror("listen");
+            exit(EXIT_FAILURE);
+        }
+
+        auto client_skt = accept(skt_fd, (struct sockaddr*)&remote, (socklen_t*)&len);
+        if(client_skt < 0){
+            perror("accept");
+            exit(EXIT_FAILURE);
+        }
+
+
+        std::cout << "accepted client" << std::endl;
+
+        if(serve_fn)
+        {
+            serve_fn(client_skt);
+        }
+        std::cout << "finished" << std::endl;
     }
 };
 
-int bind_udp_socket(const dev::host_port& bind_hp)
+
+
+int dev::bind_udp_socket(const dev::host_port& bind_hp)
 {
     struct sockaddr_in address;
     int addrlen = sizeof(address);
@@ -179,28 +185,6 @@ void dev::run_udp_server(const host_port& bind_hp, client_serve_fn serve_fn)
     }
 };
 
-void dev::run_udp_client(const host_port& cl_bind_hp, client_serve_fn client_fn)
-{
-    std::cout << "dev::run_udp_client " << cl_bind_hp.host << " " << cl_bind_hp.port << std::endl;
-    auto skt_fd = bind_udp_socket(cl_bind_hp);
-
-    if(skt_fd > 0)
-    {
-        if(client_fn)
-        {
-            std::cout << "running udp client on [" << cl_bind_hp.host << ", " << cl_bind_hp.port << "]" << std::endl;
-            client_fn(skt_fd);
-        }        
-    }
-};
-
-/**
-   ctf_socket
-*/
-void dev::ctf_socket::init(int sk)
-{
-    m_skt = sk;
-};
 
 
 /**
@@ -252,9 +236,10 @@ bool dev::blocking_tcp_socket::readall(char *buf, size_t len)
     return true;
 };
 
-std::pair<int, int>  dev::blocking_tcp_socket::read_packet(ctf_packet& pkt)
+
+dev::sck_pkt_res dev::blocking_tcp_socket::read_packet_no_stat(ctf_packet& pkt)
 {
-    std::pair<int, int> rv = {0,0};
+    dev::sck_pkt_res rv = {0,0};
     if(!readall((char*)&pkt, CTF_HEADER_SIZE))return {-1,-1};
     //std::cout << "in:" << pkt << std::endl;
     
@@ -269,35 +254,36 @@ std::pair<int, int>  dev::blocking_tcp_socket::read_packet(ctf_packet& pkt)
         std::cout << "invalid 'protocol' received [" << pkt.protocol << " expected [" << ctf_protocol << "]\n";
         return {0,0};
     }
-    rv.first = ntohs(pkt.bdata_len);
-    if(rv.first > CTF_MAX_PAYLOAD)
+    rv.len = ntohs(pkt.bdata_len);
+    if(rv.len > CTF_MAX_PAYLOAD)
     {
-        std::cout << "big data size received [" << rv.first
+        std::cout << "big data size received [" << rv.len
                   << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
-        rv.first = CTF_MAX_PAYLOAD;
+        rv.len = CTF_MAX_PAYLOAD;
         return {0,0};
     }
+    rv.seq = ntohs(pkt.seq);
     
 //    std::cout << "pkt:" << pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
-    if(!readall((char*)pkt.data, rv.first))return {-1,-1};
-    char frame_end;
-    if(!readall(&frame_end, 1))return {-1,-1};
-    
+    if(!readall((char*)pkt.data, rv.len + 1))return {-1,-1};
+    char frame_end = pkt.data[rv.len];
+//    if(!readall(&frame_end, 1))return {-1,-1};    
     if(frame_end != ctf_frame_end)
     {
         std::cout << "invalid 'frame_end' received [" << (int)frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
         return {0,0};
     }
-
+    pkt.data[rv.len] = 0;
+    
     return rv;    
 };
 
 /**
    udp_socket
 */
-void dev::udp_socket::setConn(const dev::HOST_PORT_ARR& arr)
+void dev::udp_socket::set_mcast_conn(const dev::HOST_PORT_ARR& arr)
 {
-    m_conn_hp = arr;
+    m_mcast = arr;
 };
 
 bool dev::udp_socket::send_packet(const ctf_packet& pkt, datalen_t wire_len)
@@ -305,9 +291,10 @@ bool dev::udp_socket::send_packet(const ctf_packet& pkt, datalen_t wire_len)
     return sendall((char*)&pkt, wire_len);
 };
 
-std::pair<int, int> dev::udp_socket::read_packet(ctf_packet& pkt)
+
+dev::sck_pkt_res dev::udp_socket::read_packet_no_stat(ctf_packet& pkt)
 {
-    std::pair<int, int> rv = {0,0};
+    sck_pkt_res rv = {0,0};
     if(!readall((char*)&pkt, sizeof(ctf_packet)))return {-1, -1};
     
     if(pkt.frame_start != ctf_frame_start)
@@ -321,22 +308,24 @@ std::pair<int, int> dev::udp_socket::read_packet(ctf_packet& pkt)
         std::cout << "invalid 'protocol' received [" << pkt.protocol << " expected [" << ctf_protocol << "]\n";
         return {0,0};
     }
-    rv.first = ntohs(pkt.bdata_len);
-    if(rv.first > CTF_MAX_PAYLOAD)
+    rv.len = ntohs(pkt.bdata_len);
+    if(rv.len > CTF_MAX_PAYLOAD)
     {
-        std::cout << "big data size received [" << rv.first << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
-        rv.first = CTF_MAX_PAYLOAD;
+        std::cout << "big data size received [" << rv.len << " payload limited to [" << CTF_MAX_PAYLOAD << "]\n";
+        rv.len = CTF_MAX_PAYLOAD;
         return {0,0};
     }
+    rv.seq = ntohs(pkt.seq);
     
     //std::cout << "pkt:" << m_pkt << " protocol=" << protocol_h << " len=" << bdata_len_h << std::endl;
-    char frame_end = pkt.data[rv.first];
+    char frame_end = pkt.data[rv.len];
     if(frame_end != ctf_frame_end)
     {
         std::cout << "invalid 'frame_end' received [" << (int)frame_end << "] expected [" << (int)ctf_frame_end << "]\n";
         return {0,0};
     }
-
+    pkt.data[rv.len] = 0;
+    
     return rv;
 };
 
@@ -347,7 +336,7 @@ bool dev::udp_socket::readall(char *buf, size_t len)
     memset(&address, 0 , sizeof(address));
     address.sin_family = AF_INET;
     
-    for(const auto& c : m_conn_hp)
+    for(const auto& c : m_mcast)
     {
         inet_pton(AF_INET, c.host.c_str(), &(address.sin_addr));
         address.sin_port = htons(c.port);
@@ -363,10 +352,6 @@ bool dev::udp_socket::readall(char *buf, size_t len)
             perror("socket-read/closed");
             return false;
         }
-
-        //if(n != 448){
-        //    std::cout << len << " " << n << "\n";
-        //}
     }
     
     return true;
@@ -378,7 +363,7 @@ bool dev::udp_socket::sendall(char *buf, size_t len)
     memset(&address, 0 , sizeof(address));
     address.sin_family = AF_INET;
     
-    for(const auto& c : m_conn_hp)
+    for(const auto& c : m_mcast)
     {
         inet_pton(AF_INET, c.host.c_str(), &(address.sin_addr));
         address.sin_port = htons(c.port);

@@ -29,17 +29,6 @@ std::string dev::set_tag_stat::to_string()const
         if(it != m_stat.cend())rv += ",";
     }
     
-/*    if(!m_stat.empty())
-    {
-        for(const auto& i : m_stat)
-        {
-            rv += i.first;
-            rv += ":";
-            rv += dev::size_human(i.second, false);
-            rv += ",";
-        }
-        rv.pop_back();
-        }*/
     rv += ")";
     return rv;
 };
@@ -179,7 +168,6 @@ std::optional<dev::var_generator> dev::tag_generator_factory::produce_generator(
                 g.m_data.push_back(s1);
             }
             idx_b = p + 1;
-            //std::cout << p << " " << s1 << std::endl;
             p = s.find_first_of(",)", idx_b);
         }
         g.m_it = g.m_data.begin();
@@ -189,19 +177,15 @@ std::optional<dev::var_generator> dev::tag_generator_factory::produce_generator(
     {
         range_tag_generator g;
         
-//        std::cout << "parsing= " << s << std::endl;
         size_t idx_b = 1;
         auto r_dots = s.find("..", 1);
         if(r_dots == std::string::npos)return {};
         std::string_view range_begin = s.substr(idx_b, r_dots-idx_b);
-        //      std::cout << "range_begin= " << range_begin << std::endl;
         auto r_comma = s.find(",", r_dots);
         std::string_view range_end = s.substr(r_dots+2, r_comma-r_dots-2);
-//        std::cout << "range_end= " << range_end << std::endl;
         auto brk_end = s.find("]", r_comma);
         if(brk_end == std::string::npos)return {};
         std::string_view range_step = s.substr(r_comma+1, brk_end-r_comma-1);
-        //      std::cout << "range_step= " << range_step << std::endl;
 
         g.m_range_begin = dev::stoui(range_begin);
         g.m_range_end = dev::stoui(range_end);
@@ -222,29 +206,5 @@ bool dev::stat_tag_mapper::map_tag(size_t tag, const std::string_view& sv)
     {
         std::visit([&sv](auto&& st){st.update_stat(sv);}, i->second);
     }
-/*    if(tag == m_pkt_counter_tag && tag != 0)
-    {
-        auto n = dev::stoui(sv);
-        if(n != 0)
-        {
-            if(n != m_prev_pkt_num + 1)
-            {
-                auto i = m_missing_pkt.find(n);
-                if(i != m_missing_pkt.end())
-                {
-                    ++m_out_of_order_pkt_num;
-                    m_missing_pkt.erase(n);
-                    --m_lost_pkt_num;
-                }
-                else
-                {
-                    m_missing_pkt.insert(n);
-                    ++m_lost_pkt_num;
-                }
-                
-            }
-            m_prev_pkt_num = n;
-        }
-        }*/
     return true;
 };
