@@ -1,0 +1,61 @@
+alias lt='ls -lt'
+alias eg='env|grep $@'
+alias e='emacs "$@"'
+alias lg='ls -l|grep $@'
+alias prj='cd $HOME/dev-tools/dev;pwd;ls -l'
+alias python='python3 $@'
+
+function pid(){ 
+ps -ef | grep -va grep | grep "$@"
+}
+
+function h(){ 
+history
+}
+
+
+function nloop {
+while true
+do
+    netstat -nap 2>/dev/null | grep -E $1
+    echo "-----"
+    sleep 0.5
+done
+}
+
+ 
+function listen {
+     pd1=`ps -ef|grep $1|grep $USER|grep -v grep|awk '{print $2}'`
+     netstat -nap 2>/dev/null | grep $pd1 | grep LISTEN
+}
+
+ 
+function fls {
+     pd1=`ps -ef|grep $1|grep $USER|grep -v grep|awk '{print $2}'`
+     ls -la /proc/$pd1/fd
+}
+
+function switch2gcc7 {
+     scl enable devtoolset-7 bash
+}
+
+function ttag {
+      if [ $# -eq 2 ]
+      then
+           awk -v v1=$1 -v v2=$2 -F"|" '{for(i=1;i<=NF;i++){split($i,t,"=");if(t[1] == v1 || t[1] == v2){printf "%s|",$i}};printf "\n"}'
+      elif [ $# -eq 3 ]
+      then
+           awk -v v1=$1 -v v2=$2 -v v3=$3 -F"|" '{for(i=1;i<=NF;i++){split($i,t,"=");if(t[1] == v1 || t[1] == v2 || t[1] == v3){printf "%s|",$i}};printf "\n"}'
+      elif [ $# -eq 4 ]
+      then
+           awk -v v1=$1 -v v2=$2 -v v3=$3 -v v4=$4 -F"|" '{for(i=1;i<=NF;i++){split($i,t,"=");if(t[1] == v1 || t[1] == v2 || t[1] == v3 || t[1] == v4){printf "%s|",$i}};printf "\n"}'
+      elif [ $# -eq 5 ]
+      then
+           awk -v v1=$1 -v v2=$2 -v v3=$3 -v v4=$4 -v v5=$5 -F"|" '{for(i=1;i<=NF;i++){split($i,t,"=");if(t[1] == v1 || t[1] == v2 || t[1] == v3 || t[1] == v4 || t[1] == v5){printf "%s|",$i}};printf "\n"}'
+      elif [ $# -eq 6 ]
+      then
+          awk -v v1=$1 -v v2=$2 -v v3=$3 -v v4=$4 -v v5=$5 -v v6=$6 -F"|" '{for(i=1;i<=NF;i++){split($i,t,"=");if(t[1] == v1 || t[1] == v2 || t[1] == v3 || t[1] == v4 || t[1] == v5 || t[1] == v6){printf "%s|",$i}};printf "\n"}'
+      else
+         echo "more"
+      fi
+}
