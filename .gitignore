@@ -4,3 +4,6 @@ dev/cfix/build/
 dev/benchmark/bin/
 dev/test/bin/
 dev/test/build/
+dev/GPATH
+dev/GRTAGS
+dev/GTAGS

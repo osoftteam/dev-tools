@@ -21,7 +21,7 @@ std::string selected_udp_client;
 
 
 static void display_help(const char* n)
-{
+{        
     std::cout << n << " -r <run-option>\n";
     std::cout << n << " -f <cfg-file> read config file\n\n";
     std::cout << "Example(tcp): " << n << " -r ctf-server" << " -f data/spin.properties\n";
@@ -44,6 +44,7 @@ static void display_help(const char* n)
     std::cout << std::endl;
     std::cout << "";
     std::cout << "-V - verbose, print data, busy screen\n";
+    std::cout << "-H <domain> - host info, discover IP addresses\n";
     std::cout << "-r run as..\n";
     std::cout << "    ctf-server - send data wrapped in CTF-packets\n";
     std::cout << "    ctf-client - consume CTF-packets\n";
@@ -71,8 +72,6 @@ int main(int argc, char* argv[])
 
     return 0;
 */  
-//    std::cout << sizeof(dev::ctf_packet) << "\n";
-//    return 0;
     
     signal(SIGPIPE, SIGPIPE_handler);
     std::string cfg_file, runmode;
@@ -80,9 +79,16 @@ int main(int argc, char* argv[])
     if(argc > 1)
     {
         int opt;
-        while ((opt = getopt(argc, argv, "hf:r:VFp:u:m:")) != -1) {
+        while ((opt = getopt(argc, argv, "hf:r:VFp:u:m:H:")) != -1) {
             switch(opt)
             {
+            case 'H':
+            {
+                //               std::string host = optarg;
+                dev::showip(optarg);
+                //std::cout << dev::get_ip() << "\n";
+                return 0;
+            }break;
             case 'h':
             {
                 display_help(argv[0]);

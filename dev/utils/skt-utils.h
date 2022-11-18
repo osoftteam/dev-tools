@@ -114,6 +114,8 @@ namespace dev
     void run_unix_client(const host_port& conn_hp, CP& processor);
 
     std::ostream& operator<<(std::ostream& os, const dev::ctf_packet& t);
+
+    void showip(const char* host);
 }
 
 template<class B>

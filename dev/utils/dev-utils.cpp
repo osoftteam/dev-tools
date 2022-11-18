@@ -5,7 +5,7 @@
 
 size_t dev::stoui(const std::string_view& s)
 {
-    static size_t arr10[] = {10,100,1000,10000,100000,1000000, 10000000}; 
+    static size_t arr10[] = {10,100,1000,10000,100000,1000000,10000000,100000000,1000000000}; 
     if(s.empty())return 0;
     auto i = s.rbegin();
 

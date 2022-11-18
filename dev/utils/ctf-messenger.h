@@ -64,7 +64,7 @@ void dev::ctf_messenger<SK>::spin_packets(const ctf_packet& pkt, datalen_t wire_
     {
         pkt.setseq(pnum);
         if(!m_sk.send_packet(pkt, wire_len))return;
-        
+
         if(m_spin_sleep_time_ms > 0)
         {
             std::this_thread::sleep_for(std::chrono::milliseconds(m_spin_sleep_time_ms));
@@ -72,7 +72,7 @@ void dev::ctf_messenger<SK>::spin_packets(const ctf_packet& pkt, datalen_t wire_
 
         total_sent += wire_len;
         ++pnum;
-        
+
         auto now = time(nullptr);
         auto time_delta = now - session_start;
         if(print_time != (size_t)time_delta && time_delta%2 == 0)
@@ -81,7 +81,7 @@ void dev::ctf_messenger<SK>::spin_packets(const ctf_packet& pkt, datalen_t wire_
             auto bpsec = int(total_sent / time_delta);
             std::cout << "#" << pnum << " " << dev::size_human(total_sent) << " " << dev::size_human(bpsec) << "/sec" << std::endl;
         }
-    }    
+    }
 };
 
 template<class SK>
